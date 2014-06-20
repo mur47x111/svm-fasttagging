@@ -1,0 +1,6 @@
+java.*.*
+sun.*.*
+javax.*.*
+com.sun.*.*
+com.oracle.*.*
+jdk.*.*
