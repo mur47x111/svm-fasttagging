@@ -32,9 +32,9 @@
 							</tool>
 							<tool id="org.eclipse.cdt.build.core.settings.holder.1373508407" name="GNU C" superClass="org.eclipse.cdt.build.core.settings.holder">
 								<option id="org.eclipse.cdt.build.core.settings.holder.incpaths.1395500688" name="Include Paths" superClass="org.eclipse.cdt.build.core.settings.holder.incpaths" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/src-disl-agent}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/DiSL/src-jdk-include}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/DiSL/src-jdk-include/macosx}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/src-disl-agent}&quot;"/>
 								</option>
 								<option id="org.eclipse.cdt.build.core.settings.holder.symbols.854925808" name="Symbols" superClass="org.eclipse.cdt.build.core.settings.holder.symbols" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="_LP64"/>

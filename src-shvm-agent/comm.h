@@ -4,7 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#include "jvmtihelper.h"
+#include "jvmtiutil.h"
 
 // sends data over network
 void send_data(int sockfd, const void * data, int data_len) {
@@ -15,7 +15,7 @@ void send_data(int sockfd, const void * data, int data_len) {
 
 		int res = send(sockfd, ((unsigned char *)data) + sent,
 				(data_len - sent), 0);
-		check_std_error(res, -1, "Error while sending data to server");
+		check_std_error(res == -1, "Error while sending data to server");
 		sent += res;
 	}
 }
@@ -29,7 +29,7 @@ void rcv_data(int sockfd, void * data, int data_len) {
 
 		int res = recv(sockfd, ((unsigned char *)data) + received,
 				(data_len - received), 0);
-		check_std_error(res, -1, "Error while receiving data from server");
+		check_std_error(res == -1, "Error while receiving data from server");
 
 		received += res;
 	}

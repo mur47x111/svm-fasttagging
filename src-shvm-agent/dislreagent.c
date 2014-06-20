@@ -11,10 +11,7 @@
 #include <jvmti.h>
 #include <jni.h>
 
-// has to be defined for jvmtihelper.h
-#define ERR_PREFIX "DiSL-RE agent error: "
-
-#include "jvmtihelper.h"
+#include "jvmtiutil.h"
 #include "comm.h"
 
 #include "messagetype.h"
@@ -25,7 +22,8 @@
 
 #include "dislreagent.h"
 
-static const int ERR_SERVER = 10003;
+#include "processbuffs.h"
+#include "threadlocal.h"
 
 // defaults - be sure that space in host_name is long enough
 static const char * DEFAULT_HOST = "localhost";
@@ -38,57 +36,17 @@ static char port_number[6]; // including final 0
 static jvmtiEnv * jvmti_env;
 static JavaVM * java_vm;
 
-static int jvm_started = FALSE;
+static int jvm_started = 0;
 
-static volatile int no_tagging_work = FALSE;
-static volatile int no_sending_work = FALSE;
+static volatile int no_tagging_work = 0;
+static volatile int no_sending_work = 0;
 
 // *** Sync queues ***
 
-// queues contain process_buffs structure
 
-// Utility queue (buffer) is specifically reserved for sending different
-// messages then analysis messages. The rationale behind utility buffers is that
-// at least one utility buffer is available or will be available in the near
-// future no matter what. One of the two must hold:
-// 1) Acquired buffer is send without any additional locking in between.
-// 2) Particular "usage" (place of use) may request only constant number of
-//    buffers. Place and constant is described right below and the queue size is
-//    sum of all constants here
-
-//    buffer for case 1)                     1
-//    object free message                    1
-//    new class info message                 1
-//    just to be sure (parallelism for 1)    3
-#define BQ_UTILITY 6
-
-// queue with empty utility buffers
-static blocking_queue utility_q;
-
-// number of all buffers - used for analysis with some exceptions
-#define BQ_BUFFERS 32
 
 // number of analysis requests in one message
 #define ANALYSIS_COUNT 16384
-
-
-// queue with empty buffers
-static blocking_queue empty_q;
-
-// queue where buffers are queued for sending
-static blocking_queue send_q;
-
-// queue where buffers are queued for object
-static blocking_queue objtag_q;
-
-typedef struct {
-	buffer * command_buff;
-	buffer * analysis_buff;
-	jlong owner_id;
-} process_buffs;
-
-// list of all allocated bq buffers
-static process_buffs pb_list[BQ_BUFFERS + BQ_UTILITY];
 
 #define OT_OBJECT 1
 #define OT_DATA_OBJECT 2
@@ -106,8 +64,6 @@ typedef struct {
 	jint analysis_count;
 	size_t analysis_count_pos;
 } to_buff_struct;
-
-#define INVALID_BUFF_ID -1
 
 #define TO_BUFFER_MAX_ID 127 // byte is the holding type
 #define TO_BUFFER_COUNT (TO_BUFFER_MAX_ID + 1) // +1 for buffer id 0
@@ -140,9 +96,6 @@ static volatile jint avail_class_id = 1;
 // first available id for new messages
 static volatile jshort avail_analysis_id = 1;
 
-// *** Thread ids ***
-
-#define INVALID_THREAD_ID -1
 
 #define STARTING_THREAD_ID (TO_BUFFER_MAX_ID + 1)
 
@@ -150,306 +103,11 @@ static volatile jshort avail_analysis_id = 1;
 static volatile jlong avail_thread_id = STARTING_THREAD_ID;
 
 
-// *** Thread locals ***
-
-// NOTE: The JVMTI functionality allows to implement everything
-// using JVM, but the GNU implementation is faster and WORKING
-
-
-struct tldata {
-	jlong id;
-	process_buffs * local_pb;
-	jbyte to_buff_id;
-	process_buffs * pb;
-	buffer * analysis_buff;
-	buffer * command_buff;
-	jint analysis_count;
-	size_t analysis_count_pos;
-	size_t args_length_pos;
-};
-
-
-#if defined (__APPLE__) && defined (__MACH__)
-
-//
-// Use pthreads on Mac OS X
-//
-
-static pthread_key_t tls_key;
-
-
-static void tls_init () {
-	int result = pthread_key_create (& tls_key, NULL);
-	check_error(result != 0, "Failed to allocate thread-local storage key");
-}
-
-
-inline static struct tldata * tld_init (struct tldata * tld) {
-	tld->id= INVALID_THREAD_ID;
-	tld->local_pb = NULL;
-	tld->to_buff_id = INVALID_BUFF_ID;
-	tld->pb = NULL;
-	tld->analysis_buff = NULL;
-	tld->analysis_count = 0;
-	tld->analysis_count_pos = 0;
-
-	return tld;
-}
-
-static struct tldata * tld_create ()  {
-	struct tldata * tld = malloc (sizeof (struct tldata));
-	check_error (tld == NULL, "Failed to allocate thread-local data");
-	int result = pthread_setspecific (tls_key, tld);
-	check_error (result != 0, "Failed to store thread-local data");
-	return tld_init (tld);
-}
-
-inline static struct tldata * tld_get () {
-	struct tldata * tld = pthread_getspecific (tls_key);
-	return (tld != NULL) ? tld : tld_create ();
-}
-
-#else
-
-//
-// Use GNU __thread where supported
-//
-
-static void tls_init () {
-	// empty
-}
-
-
-static __thread struct tldata tld = {
-		.id = INVALID_THREAD_ID,
-		.local_pb = NULL,
-		.to_buff_id = INVALID_BUFF_ID,
-		.pb = NULL,
-		.analysis_buff = NULL,
-		.command_buff = NULL,
-		.analysis_count = 0,
-		.analysis_count_pos = 0,
-};
-
-inline static struct tldata * tld_get () {
-	return & tld;
-}
-
-#endif
 
 
 // *** Threads ***
 
 static pthread_t objtag_thread;
-static pthread_t send_thread;
-
-// ******************* Helper routines *******************
-
-static void parse_agent_options(char *options) {
-
-	static const char PORT_DELIM = ':';
-
-	// assign defaults
-	strcpy(host_name, DEFAULT_HOST);
-	strcpy(port_number, DEFAULT_PORT);
-
-	// no options found
-	if (options == NULL) {
-		return;
-	}
-
-	char * port_start = strchr(options, PORT_DELIM);
-
-	// process port number
-	if(port_start != NULL) {
-
-		// replace PORT_DELIM with end of the string (0)
-		port_start[0] = '\0';
-
-		// move one char forward to locate port number
-		++port_start;
-
-		// convert number
-		int fitsP = strlen(port_start) < sizeof(port_number);
-		check_error(! fitsP, "Port number is too long");
-
-		strcpy(port_number, port_start);
-	}
-
-	// check if host_name is big enough
-	int fitsH = strlen(options) < sizeof(host_name);
-	check_error(! fitsH, "Host name is too long");
-
-	strcpy(host_name, options);
-}
-
-// ******************* Advanced buffer routines *******************
-
-// owner_id can have several states
-// > 0 && <= TO_BUFFER_MAX_ID
-//    - means that buffer is reserved for total ordering events
-// >= STARTING_THREAD_ID
-//    - means that buffer is owned by some thread that is marked
-// == -1 - means that buffer is owned by some thread that is NOT tagged
-
-// == PB_FREE - means that buffer is currently free
-static const jlong PB_FREE = -100;
-
-// == PB_OBJTAG - means that buffer is scheduled (processed) for object tagging
-static const jlong PB_OBJTAG = -101;
-
-// == PB_SEND - means that buffer is scheduled (processed) for sending
-static const jlong PB_SEND = -102;
-
-// == PB_UTILITY - means that this is special utility buffer
-static const jlong PB_UTILITY = -1000;
-
-static process_buffs * buffs_utility_get() {
-#ifdef DEBUG
-	printf("Acquiring buffer -- utility (thread %ld)\n", tld_get()->id);
-#endif
-
-	// retrieves pointer to buffer
-	process_buffs * buffs;
-	bq_pop(&utility_q, &buffs);
-
-	// no owner setting - it is already PB_UTILITY
-
-#ifdef DEBUG
-	printf("Buffer acquired -- utility (thread %ld)\n", tld_get()->id);
-#endif
-
-	return buffs;
-}
-
-static process_buffs * buffs_utility_send(process_buffs * buffs) {
-#ifdef DEBUG
-	printf("Queuing buffer (utility) -- send (thread %ld)\n", tld_get()->id);
-#endif
-
-	// no owner setting - it is already PB_UTILITY
-	bq_push(&send_q, &buffs);
-
-#ifdef DEBUG
-	printf("Buffer queued (utility) -- send (thread %ld)\n", tld_get()->id);
-#endif
-
-	return buffs;
-}
-
-// normally only sending thread should access this function
-static void _buffs_utility_release(process_buffs * buffs) {
-#ifdef DEBUG
-	printf("Queuing buffer -- utility (thread %ld)\n", tld_get()->id);
-#endif
-
-	// empty buff
-	buffer_clean(buffs->analysis_buff);
-	buffer_clean(buffs->command_buff);
-
-	// stores pointer to buffer
-	buffs->owner_id = PB_UTILITY;
-	bq_push(&utility_q, &buffs);
-
-#ifdef DEBUG
-	printf("Buffer queued -- utility (thread %ld)\n", tld_get()->id);
-#endif
-}
-
-static process_buffs * buffs_get(jlong thread_id) {
-#ifdef DEBUG
-	printf("Acquiring buffer -- empty (thread %ld)\n", tld_get()->id);
-#endif
-
-	// retrieves pointer to buffer
-	process_buffs * buffs;
-	bq_pop(&empty_q, &buffs);
-
-	buffs->owner_id = thread_id;
-
-#ifdef DEBUG
-	printf("Buffer acquired -- empty (thread %ld)\n", tld_get()->id);
-#endif
-
-	return buffs;
-}
-
-// normally only sending thread should access this function
-static void _buffs_release(process_buffs * buffs) {
-#ifdef DEBUG
-	printf("Queuing buffer -- empty (thread %ld)\n", tld_get()->id);
-#endif
-
-	// empty buff
-	buffer_clean(buffs->analysis_buff);
-	buffer_clean(buffs->command_buff);
-
-	// stores pointer to buffer
-	buffs->owner_id = PB_FREE;
-	bq_push(&empty_q, &buffs);
-
-#ifdef DEBUG
-	printf("Buffer queued -- empty (thread %ld)\n", tld_get()->id);
-#endif
-}
-
-static void buffs_objtag(process_buffs * buffs) {
-#ifdef DEBUG
-	printf("Queuing buffer -- objtag (thread %ld)\n", tld_get()->id);
-#endif
-
-	buffs->owner_id = PB_OBJTAG;
-	bq_push(&objtag_q, &buffs);
-
-#ifdef DEBUG
-	printf("Buffer queued -- objtag (thread %ld)\n", tld_get()->id);
-#endif
-}
-
-// only objtag thread should access this function
-static process_buffs * _buffs_objtag_get() {
-#ifdef DEBUG
-	printf("Acquiring buffer -- objtag (thread %ld)\n", tld_get()->id);
-#endif
-
-	process_buffs * buffs;
-	bq_pop(&objtag_q, &buffs);
-
-#ifdef DEBUG
-	printf("Buffer acquired -- objtag (thread %ld)\n", tld_get()->id);
-#endif
-
-	return buffs;
-}
-
-static void _buffs_send(process_buffs * buffs) {
-#ifdef DEBUG
-	printf("Queuing buffer -- send (thread %ld)\n", tld_get()->id);
-#endif
-
-	buffs->owner_id = PB_SEND;
-	bq_push(&send_q, &buffs);
-
-#ifdef DEBUG
-	printf("Buffer queued -- send (thread %ld)\n", tld_get()->id);
-#endif
-}
-
-// only sending thread should access this function
-static process_buffs * _buffs_send_get() {
-#ifdef DEBUG
-	printf("Acquiring buffer -- send (thread %ld)\n", tld_get()->id);
-#endif
-
-	process_buffs * buffs;
-	bq_pop(&send_q, &buffs);
-
-#ifdef DEBUG
-	printf("Buffer acquired -- send (thread %ld)\n", tld_get()->id);
-#endif
-
-	return buffs;
-}
 
 // ******************* Advanced packing routines *******************
 
@@ -920,7 +578,7 @@ static void ot_pack_thread_data(JNIEnv * jni_env, buffer * buff,
 
 static void update_send_status(jobject to_send, jlong * net_ref) {
 
-	net_ref_set_spec(net_ref, TRUE);
+	net_ref_set_spec(net_ref, 1);
 	update_net_reference(jvmti_env, to_send, *net_ref);
 }
 
@@ -931,7 +589,7 @@ static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
 	// that multiple threads will send it, but this will hurt only performance
 
 	// test if the data was already sent to the server
-	if(net_ref_get_spec(*net_ref) == TRUE) {
+	if(net_ref_get_spec(*net_ref) == 1) {
 		return;
 	}
 
@@ -1090,109 +748,6 @@ static void * objtag_thread_loop(void * obj) {
 	return NULL;
 }
 
-// ******************* Sending thread *******************
-
-static void _send_buffer(int connection, buffer * b) {
-
-	// send data
-	// NOTE: normally access the buffer using methods
-	send_data(connection, b->buff, b->occupied);
-}
-
-static int open_connection() {
-
-	// get host address
-	struct addrinfo * addr;
-	int gai_res = getaddrinfo(host_name, port_number, NULL, &addr);
-	check_error(gai_res != 0, gai_strerror(gai_res));
-
-	// create stream socket
-	int sockfd = socket(addr->ai_family, SOCK_STREAM, 0);
-	check_std_error(sockfd, -1, "Cannot create socket");
-
-	// connect to server
-	int conn_res = connect(sockfd, addr->ai_addr, addr->ai_addrlen);
-	check_std_error(conn_res, -1, "Cannot connect to server");
-
-	// free host address info
-	freeaddrinfo(addr);
-
-	return sockfd;
-}
-
-static void close_connection(int conn, jlong thread_id) {
-
-	// send close message
-
-	// obtain buffer
-	process_buffs * buffs = buffs_get(thread_id);
-	buffer * buff = buffs->command_buff;
-
-	// msg id
-	pack_byte(buff, MSG_CLOSE);
-
-	// send buffer directly
-	_send_buffer(conn, buff);
-
-	// release buffer
-	_buffs_release(buffs);
-
-	// close socket
-	close(conn);
-}
-static void * send_thread_loop(void * obj) {
-
-#ifdef DEBUG
-	printf("Sending thread start (thread %ld)\n", tld_get()->id);
-#endif
-
-	// open connection
-	int connection = open_connection();
-
-	// exit when the jvm is terminated and there are no msg to process
-	while(! (no_sending_work && bq_length(&send_q) == 0) ) {
-
-		// get buffer
-		// TODO thread could timeout here with timeout about 5 sec and check
-		// if all of the buffers are allocated by the application threads
-		// and all application threads are waiting on free buffer - deadlock
-		process_buffs * pb = _buffs_send_get();
-
-#ifdef DEBUG
-		printf("Sending buffer (thread %ld)\n", tld_get()->id);
-#endif
-
-		// first send command buffer - contains new class or object ids,...
-		_send_buffer(connection, pb->command_buff);
-		// send analysis buffer
-		_send_buffer(connection, pb->analysis_buff);
-
-		// release (enqueue) buffer according to the type
-		if(pb->owner_id == PB_UTILITY) {
-			// utility buffer
-			_buffs_utility_release(pb);
-		}
-		else {
-			// normal buffer
-			_buffs_release(pb);
-		}
-
-#ifdef DEBUG
-		printf("Buffer sent (thread %ld)\n", tld_get()->id);
-#endif
-	}
-
-	// close connection
-	close_connection(connection, tld_get()->id);
-
-#ifdef DEBUG
-	printf("Sending thread end (thread %ld)\n", tld_get()->id);
-#endif
-
-	return NULL;
-}
-
-
 // ******************* REDispatch methods *******************
 
 JNIEXPORT jshort JNICALL Java_ch_usi_dag_dislre_REDispatch_registerMethod
@@ -1312,11 +867,10 @@ void JNICALL jvmti_callback_class_file_load_hook(
 		jint class_data_len, const unsigned char* class_data,
 		jint* new_class_data_len, unsigned char** new_class_data
 ) {
-	struct tldata * tld = tld_get();
-
-	// TODO instrument analysis classes
+  // TODO instrument analysis classes
 
 #ifdef DEBUG
+  struct tldata * tld = tld_get();
 	printf("Sending new class (thread %ld)\n", tld_get()->id);
 #endif
 
@@ -1329,7 +883,7 @@ void JNICALL jvmti_callback_class_file_load_hook(
 		jlong loader_id = NULL_NET_REF;
 
 		// obtain buffer
-		process_buffs * buffs = buffs_utility_get(tld->id);
+		process_buffs * buffs = buffs_utility_get();
 		buffer * buff = buffs->analysis_buff;
 
 		// this callback can be called before the jvm is started
@@ -1478,7 +1032,7 @@ void JNICALL jvmti_callback_object_free_hook(
 void JNICALL jvmti_callback_vm_start_hook(
 		jvmtiEnv *jvmti_env, JNIEnv* jni_env
 ) {
-	jvm_started = TRUE;
+	jvm_started = 1;
 }
 
 
@@ -1596,7 +1150,7 @@ void JNICALL jvmti_callback_vm_death_hook(
 
 	// shutdown - first tagging then sending thread
 
-	no_tagging_work = TRUE;
+	no_tagging_work = 1;
 
 	// send empty buff to obj_tag thread -> ensures exit if waiting
 	process_buffs * buffs = buffs_get(tld->id);
@@ -1606,19 +1160,7 @@ void JNICALL jvmti_callback_vm_death_hook(
 	int rc1 = pthread_join(objtag_thread, NULL);
 	check_error(rc1 != 0, "Cannot join tagging thread.");
 
-	no_sending_work = TRUE;
-
-	// TODO if multiple sending threads, multiple empty buffers have to be send
-	// TODO also the buffers should be numbered according to the arrival to the
-	// sending queue - has to be supported by the queue itself
-
-	// send empty buff to sending thread -> ensures exit if waiting
-	buffs = buffs_get(tld->id);
-	_buffs_send(buffs);
-
-	// wait for thread end
-	int rc2 = pthread_join(send_thread, NULL);
-	check_error(rc2 != 0, "Cannot join sending thread.");
+	svm_disconnect();
 
 	// NOTE: Buffers hold by other threads can be in inconsistent state.
 	// We cannot simply send them, so we at least inform the user.
@@ -1751,14 +1293,15 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 	jvmti_env = NULL;
 	jint res = (*jvm)->GetEnv(jvm, (void **) &jvmti_env, JVMTI_VERSION_1_0);
 	if (res != JNI_OK || jvmti_env == NULL) {
-		fprintf(stderr, 
-				"%sUnable to access JVMTI Version 1 (0x%x),"
-				" is your J2SE a 1.5 or newer version?"
-				" JNIEnv's GetEnv() returned %d\n",
-				ERR_PREFIX, JVMTI_VERSION_1, res
-		);
-
-		exit(ERR_JVMTI);
+//		fprintf(stderr,
+//				"%sUnable to access JVMTI Version 1 (0x%x),"
+//				" is your J2SE a 1.5 or newer version?"
+//				" JNIEnv's GetEnv() returned %d\n",
+//				ERR_PREFIX, JVMTI_VERSION_1, res
+//		);
+//
+//		exit(ERR_JVMTI);
+	  exit(-1);
 	}
 
 	//
@@ -1770,9 +1313,9 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 	//
 	jvmtiCapabilities cap;
 	memset(&cap, 0, sizeof(cap));
-	cap.can_generate_all_class_hook_events = TRUE;
-	cap.can_tag_objects = TRUE;
-	cap.can_generate_object_free_events = TRUE;
+	cap.can_generate_all_class_hook_events = 1;
+	cap.can_tag_objects = 1;
+	cap.can_generate_object_free_events = 1;
 
 	jvmtiError error;
 	error = (*jvmti_env)->AddCapabilities(jvmti_env, &cap);
@@ -1838,9 +1381,6 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 			&obj_free_lock);
 	check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
 
-	// read options (port/hostname)
-	parse_agent_options(options);
-
 	// init blocking queues
 	bq_create(jvmti_env, &utility_q, BQ_UTILITY, sizeof(process_buffs *));
 	bq_create(jvmti_env, &empty_q, BQ_BUFFERS, sizeof(process_buffs *));
@@ -1877,13 +1417,11 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
 	// initialize total ordering buff array
 	for(i = 0; i < TO_BUFFER_COUNT; ++i) {
-
 		to_buff_array[i].pb = NULL;
 	}
 
 	// start sending thread
-	int pc2 = pthread_create(&send_thread, NULL, send_thread_loop, NULL);
-	check_error(pc2 != 0, "Cannot create sending thread");
+  svm_connect(options);
 
 
 	return 0;

@@ -78,10 +78,12 @@ void
 connection_close (struct connection * connection) {
 	assert (connection != NULL);
 
+#ifdef DEBUG
 	dprintf (
 		"socket %d: sent bytes %" PRIu64 ", recv bytes %" PRIu64 "\n",
 		connection->sockfd, connection->sent_bytes, connection->recv_bytes
 	);
+#endif
 
 	close (connection->sockfd);
 	free (connection);
