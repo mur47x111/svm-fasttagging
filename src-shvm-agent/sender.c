@@ -18,8 +18,6 @@ static const char * DEFAULT_PORT = "11218";
 static char host_name[1024];
 static char port_number[6]; // including final 0
 
-static int sockfd;
-
 static void parse_agent_options(char *options) {
   // assign defaults
   strcpy(host_name, DEFAULT_HOST);
@@ -54,7 +52,7 @@ static void parse_agent_options(char *options) {
   strcpy(host_name, options);
 }
 
-static void _send_buffer(buffer * b) {
+static void send_data(int sockfd, buffer * b) {
   // send data
   // NOTE: normally access the buffer using methods
   size_t sent = 0;
@@ -67,14 +65,14 @@ static void _send_buffer(buffer * b) {
   }
 }
 
-static void open_connection() {
+static int open_connection() {
   // get host address
   struct addrinfo * addr;
   int gai_res = getaddrinfo(host_name, port_number, NULL, &addr);
   check_error(gai_res != 0, gai_strerror(gai_res));
 
   // create stream socket
-  sockfd = socket(addr->ai_family, SOCK_STREAM, 0);
+  int sockfd = socket(addr->ai_family, SOCK_STREAM, 0);
   check_std_error(sockfd == -1, "Cannot create socket");
 
   // connect to server
@@ -83,35 +81,30 @@ static void open_connection() {
 
   // free host address info
   freeaddrinfo(addr);
+  return sockfd;
 }
 
-static void close_connection() {
-  // obtain buffer
+static void close_connection(int sockfd) {
   process_buffs * pb = buffs_get(0);
   buffer * buff = pb->command_buff;
 
-  // msg id
   pack_byte(buff, MSG_CLOSE);
 
-  // send buffer directly
-  _send_buffer(buff);
-
-  // release buffer
+  send_data(sockfd, buff);
   _buffs_release(pb);
 
-  // close socket
   close(sockfd);
 }
 
 // ******************* Sender routines *******************
 
 static pthread_t sender;
-blocking_queue send_q;
+static blocking_queue send_q;
 
 static volatile int no_sending_work = 0;
 
 static void *sender_loop(void * obj) {
-  open_connection();
+  int sockfd = open_connection();
 
   // exit when the jvm is terminated and there are no msg to process
   while (!(no_sending_work && bq_length(&send_q) == 0)) {
@@ -123,9 +116,9 @@ static void *sender_loop(void * obj) {
     bq_pop(&send_q, &pb);
 
     // first send command buffer - contains new class or object ids,...
-    _send_buffer(pb->command_buff);
+    send_data(sockfd, pb->command_buff);
     // send analysis buffer
-    _send_buffer(pb->analysis_buff);
+    send_data(sockfd, pb->analysis_buff);
 
     // release (enqueue) buffer according to the type
     if (pb->owner_id == PB_UTILITY) {
@@ -137,7 +130,7 @@ static void *sender_loop(void * obj) {
     }
   }
 
-  close_connection();
+  close_connection(sockfd);
   return NULL;
 }
 
