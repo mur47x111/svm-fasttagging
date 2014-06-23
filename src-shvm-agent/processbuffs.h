@@ -6,7 +6,7 @@
 
 #include "buffer.h"
 
-#include "jvmtiutil.h"
+#include "../src-disl-agent/jvmtiutil.h"
 #include "netref.h"
 
 #include "blockingqueue.h"

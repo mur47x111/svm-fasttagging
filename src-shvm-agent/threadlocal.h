@@ -1,7 +1,7 @@
 #ifndef _THREADLOCAL_H
 #define	_THREADLOCAL_H
 
-#include "jvmtiutil.h"
+#include "../src-disl-agent/jvmtiutil.h"
 #include "processbuffs.h"
 
 // *** Thread locals ***

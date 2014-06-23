@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 #include "sender.h"
-#include "jvmtiutil.h"
+#include "../src-disl-agent/jvmtiutil.h"
 #include "processbuffs.h"
 
 // ******************* Communication *******************

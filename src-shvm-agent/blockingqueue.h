@@ -8,7 +8,7 @@
 #include <jvmti.h>
 #include <jni.h>
 
-#include "jvmtiutil.h"
+#include "../src-disl-agent/jvmtiutil.h"
 
 typedef struct {
   // array of elements

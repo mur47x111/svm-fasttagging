@@ -58,9 +58,9 @@ endif
 
 
 # Source and object files needed to create the library
-SOURCES = buffer.c buffpack.c netref.c common.c jvmtiutil.c \
-	blockingqueue.c sender.c dislreagent.c processbuffs.c \
-	tagger.c
+SOURCES = ../src-disl-agent/common.c ../src-disl-agent/jvmtiutil.c \
+	buffer.c buffpack.c netref.c blockingqueue.c \
+	tagger.c sender.c dislreagent.c processbuffs.c
 
 HEADERS = $(wildcard *.h)
 GENSRCS =

@@ -20,7 +20,7 @@
 //#error "Requires IEEE 754 floating point!"
 //#endif
 
-#include "jvmtiutil.h"
+#include "../src-disl-agent/jvmtiutil.h"
 
 #include "buffer.h"
 

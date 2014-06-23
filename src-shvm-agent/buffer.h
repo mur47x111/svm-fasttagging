@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "jvmtiutil.h"
+#include "../src-disl-agent/jvmtiutil.h"
 
 typedef struct {
 	unsigned char * buff;
