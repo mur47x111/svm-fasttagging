@@ -34,6 +34,9 @@ static JavaVM * java_vm;
 // number of analysis requests in one message
 #define ANALYSIS_COUNT 16384
 
+// list of all allocated bq buffers
+process_buffs pb_list[BQ_BUFFERS + BQ_UTILITY];
+
 // *** buffers for total ordering ***
 
 typedef struct {
@@ -150,7 +153,7 @@ static jshort register_method(JNIEnv * jni_env, jstring analysis_method_desc,
   check_error(!size_fits, "Java string is too big for sending");
 
   // obtain buffer
-  process_buffs * buffs = buffs_utility_get();
+  process_buffs * buffs = pb_utility_get();
   buffer * buff = buffs->analysis_buff;
 
   // msg id
@@ -235,7 +238,7 @@ void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
     }
 
     // get buffers
-    tld->local_pb = buffs_get(tld->id);
+    tld->local_pb = pb_get(tld->id);
   }
 
   // set local buffers for this buffering
@@ -286,7 +289,7 @@ static void analysis_start(JNIEnv * jni_env, jshort analysis_method_id,
     }
 
     // get buffers
-    tld->pb = buffs_get(tld->id);
+    tld->pb = pb_get(tld->id);
     tld->analysis_buff = tld->pb->analysis_buff;
     tld->command_buff = tld->pb->command_buff;
 
@@ -349,7 +352,7 @@ static void analysis_end_buff(struct tldata * tld) {
     // allocate new buffer
     if (tobs->pb == NULL) {
 
-      tobs->pb = buffs_get(tld->id);
+      tobs->pb = pb_get(tld->id);
 
       // set owner_id as t_buffid
       tobs->pb->owner_id = tld->to_buff_id;
@@ -635,7 +638,7 @@ void JNICALL jvmti_callback_object_free_hook(jvmtiEnv *jvmti_env, jlong tag) {
     if (obj_free_buff == NULL) {
 
       // obtain buffer
-      obj_free_buff = buffs_utility_get();
+      obj_free_buff = pb_utility_get();
 
       // reset number of events in the buffer
       obj_free_event_count = 0;
@@ -887,7 +890,7 @@ void JNICALL jvmti_callback_thread_end_hook(jvmtiEnv *jvmti_env,
   // send thread end message
 
   // obtain buffer
-  process_buffs * buffs = buffs_get(thread_id);
+  process_buffs * buffs = pb_get(thread_id);
   buffer * buff = buffs->analysis_buff;
 
   // msg id
@@ -1008,8 +1011,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
 
   // init blocking queues
-  bq_create(&utility_q, BQ_UTILITY, sizeof(process_buffs *));
-  bq_create(&empty_q, BQ_BUFFERS, sizeof(process_buffs *));
+  pb_init();
 
   // allocate buffers and add to the empty and utility buffer queues
   int i;
@@ -1031,10 +1033,10 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
     if (i < BQ_BUFFERS) {
       // add buffer to the empty queue
-      _buffs_release(pb);
+      pb_release(pb);
     } else {
       // add buffer to the utility queue
-      _buffs_utility_release(pb);
+      pb_utility_release(pb);
     }
   }
 

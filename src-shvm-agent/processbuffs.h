@@ -11,14 +11,6 @@
 
 #include "blockingqueue.h"
 
-// *** Sync queues ***
-
-// queue with empty buffers
-blocking_queue empty_q;
-
-// queue with empty utility buffers
-blocking_queue utility_q;
-
 // queues contain process_buffs structure
 
 // Utility queue (buffer) is specifically reserved for sending different
@@ -39,19 +31,6 @@ blocking_queue utility_q;
 // number of all buffers - used for analysis with some exceptions
 #define BQ_BUFFERS 32
 
-typedef struct {
-  buffer * command_buff;
-  buffer * analysis_buff;
-  jlong owner_id;
-} process_buffs;
-
-// list of all allocated bq buffers
-process_buffs pb_list[BQ_BUFFERS + BQ_UTILITY];
-
-process_buffs * buffs_get(jlong thread_id);
-
-
-
 // owner_id can have several states
 // > 0 && <= TO_BUFFER_MAX_ID
 //    - means that buffer is reserved for total ordering events
@@ -71,24 +50,18 @@ process_buffs * buffs_get(jlong thread_id);
 // == PB_UTILITY - means that this is special utility buffer
 #define PB_UTILITY -1000
 
-process_buffs * buffs_utility_get();
+typedef struct {
+  buffer * command_buff;
+  buffer * analysis_buff;
+  jlong owner_id;
+} process_buffs;
 
-process_buffs * buffs_utility_send(process_buffs * buffs);
+void pb_init();
 
-// normally only sending thread should access this function
-void _buffs_utility_release(process_buffs * buffs);
+process_buffs * pb_get(jlong thread_id);
+void pb_release(process_buffs * buffs);
 
-// normally only sending thread should access this function
-void _buffs_release(process_buffs * buffs);
-
-void buffs_objtag(process_buffs * buffs);
-
-// only objtag thread should access this function
-process_buffs * _buffs_objtag_get();
-
-void _buffs_send(process_buffs * buffs);
-
-// only sending thread should access this function
-process_buffs * _buffs_send_get();
+process_buffs * pb_utility_get();
+void pb_utility_release(process_buffs * buffs);
 
 #endif	/* _PROCESSBUFFS_H */

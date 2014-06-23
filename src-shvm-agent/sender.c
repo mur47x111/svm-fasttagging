@@ -85,13 +85,13 @@ static int open_connection() {
 }
 
 static void close_connection(int sockfd) {
-  process_buffs * pb = buffs_get(0);
+  process_buffs * pb = pb_get(0);
   buffer * buff = pb->command_buff;
 
   pack_byte(buff, MSG_CLOSE);
 
   send_data(sockfd, buff);
-  _buffs_release(pb);
+  pb_release(pb);
 
   close(sockfd);
 }
@@ -123,10 +123,10 @@ static void *sender_loop(void * obj) {
     // release (enqueue) buffer according to the type
     if (pb->owner_id == PB_UTILITY) {
       // utility buffer
-      _buffs_utility_release(pb);
+      pb_utility_release(pb);
     } else {
       // normal buffer
-      _buffs_release(pb);
+      pb_release(pb);
     }
   }
 
@@ -153,7 +153,7 @@ void sender_disconnect() {
   // sending queue - has to be supported by the queue itself
 
   // send empty buff to sending thread -> ensures exit if waiting
-  process_buffs *buffs = buffs_get(0);
+  process_buffs *buffs = pb_get(0);
   sender_enqueue(buffs);
 
   // wait for thread end

@@ -254,7 +254,7 @@ void tagger_disconnect() {
   no_tagging_work = 1;
 
   // send empty buff to obj_tag thread -> ensures exit if waiting
-  process_buffs * buffs = buffs_get(0);
+  process_buffs * buffs = pb_get(0);
   tagger_enqueue(buffs);
 
   int res = pthread_join(objtag_thread, NULL);
@@ -279,7 +279,7 @@ void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
     jlong loader_id = NULL_NET_REF;
 
     // obtain buffer
-    process_buffs * buffs = buffs_utility_get();
+    process_buffs * buffs = pb_utility_get();
     buffer * buff = buffs->analysis_buff;
 
     // this callback can be called before the jvm is started
