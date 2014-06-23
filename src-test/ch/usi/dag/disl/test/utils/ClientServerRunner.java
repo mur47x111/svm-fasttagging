@@ -41,9 +41,12 @@ public class ClientServerRunner extends Runner {
     protected void _start (
         final File testInstJar, final File testAppJar
     ) throws IOException {
-        __server = __startServer (testInstJar);
+        final File serverFile = File.createTempFile ("disl-", ".status");
+        serverFile.deleteOnExit ();
 
-        _INIT_TIME_LIMIT_.sleepUninterruptibly ();
+        __server = __startServer (testInstJar, serverFile);
+
+        watchFile (serverFile, _INIT_TIME_LIMIT_);
 
         if (! __server.isRunning ()) {
             throw new IOException ("server failed: "+ __server.getError ());
@@ -73,17 +76,23 @@ public class ClientServerRunner extends Runner {
 
         //
 
-        final Job result = new Job (command);
-        result.start ();
-        return result;
+        return new Job (command).start ();
     }
 
 
-    private Job __startServer (final File testInstJar) throws IOException {
+    private Job __startServer (
+        final File testInstJar, final File statusFile
+    ) throws IOException {
         final List <String> command = Lists.newLinkedList (
             _JAVA_COMMAND_,
             "-classpath", Runner.classPath (_DISL_SERVER_JAR_, testInstJar)
         );
+
+        if (statusFile != null) {
+            command.add (String.format (
+                "-Dserver.status.file=%s", statusFile
+            ));
+        }
 
         command.addAll (propertiesStartingWith ("dislserver."));
         command.addAll (propertiesStartingWith ("disl."));
@@ -91,9 +100,7 @@ public class ClientServerRunner extends Runner {
 
         //
 
-        final Job result = new Job (command);
-        result.start ();
-        return result;
+        return new Job (command).start ();
     }
 
 

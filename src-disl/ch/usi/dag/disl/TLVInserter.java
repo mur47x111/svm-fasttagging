@@ -1,4 +1,4 @@
-package ch.usi.dag.disl.utilinstr.tlvinserter;
+package ch.usi.dag.disl;
 
 import java.util.Set;
 
@@ -13,7 +13,7 @@ import ch.usi.dag.disl.localvar.ThreadLocalVar;
 import ch.usi.dag.disl.util.AsmHelper;
 import ch.usi.dag.disl.util.Constants;
 
-public final class TLVInserter extends ClassVisitor {
+final class TLVInserter extends ClassVisitor {
 
 	private final Set<ThreadLocalVar> threadLocalVars;
 

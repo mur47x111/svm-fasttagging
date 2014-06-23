@@ -5,45 +5,45 @@ import java.util.Formatter;
 
 public class ShadowObject implements Formattable {
 
-	final private long netRef;
-	final private long shadowId;
-	final private ShadowClass shadowClass;
+    final private long netRef;
+    final private long shadowId;
+    final private ShadowClass shadowClass;
 
-	private Object shadowState;
+    private Object shadowState;
 
-	//
+    //
 
 
     ShadowObject (final long netReference, final ShadowClass shadowClass) {
         this.netRef = netReference;
-    	this.shadowId = NetReferenceHelper.get_object_id (netReference);
+        this.shadowId = NetReferenceHelper.get_object_id (netReference);
         this.shadowClass = shadowClass;
         this.shadowState = null;
     }
 
     //
-    
+
     public long getNetRef () {
-		return netRef;
-	}
-    
+        return netRef;
+    }
+
     public long getId () {
-		return shadowId;
-	}
+        return shadowId;
+    }
 
-	public ShadowClass getShadowClass() {
+    public ShadowClass getShadowClass() {
 
-		if (shadowClass != null) {
-			return shadowClass;
-		} else {
+        if (shadowClass != null) {
+            return shadowClass;
+        } else {
 
-			if (equals(ShadowClassTable.BOOTSTRAP_CLASSLOADER)) {
-				throw new NullPointerException();
-			}
+            if (equals(ShadowClassTable.BOOTSTRAP_CLASSLOADER)) {
+                throw new NullPointerException();
+            }
 
-			return ShadowClassTable.JAVA_LANG_CLASS;
-		}
-	}
+            return ShadowClassTable.JAVA_LANG_CLASS;
+        }
+    }
 
     public synchronized Object getState () {
         return shadowState;
@@ -56,43 +56,43 @@ public class ShadowObject implements Formattable {
 
 
     public synchronized void setState (final Object shadowState) {
-		this.shadowState = shadowState;
-	}
+        this.shadowState = shadowState;
+    }
 
-	public synchronized Object setStateIfAbsent(Object shadowState) {
+    public synchronized Object setStateIfAbsent(Object shadowState) {
 
-		Object retVal = this.shadowState;
+        Object retVal = this.shadowState;
 
-		if (retVal == null) {
-			this.shadowState = shadowState;
-		}
+        if (retVal == null) {
+            this.shadowState = shadowState;
+        }
 
-		return retVal;
-	}
-	
-	// only object id considered
-	// TODO consider also the class ID
-	public int hashCode() {
-		final int prime = 31;
-		int result = 1;
-		result = prime * result + (int) (shadowId ^ (shadowId >>> 32));
-		return result;
-	}
-	
-	@Override
-	public boolean equals(Object obj) {
-		if (obj instanceof ShadowObject) {
-			return shadowId == ((ShadowObject) obj).shadowId;
-		}
+        return retVal;
+    }
 
-		return false;
-	}
+    // only object id considered
+    // TODO consider also the class ID
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + (int) (shadowId ^ (shadowId >>> 32));
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof ShadowObject) {
+            return shadowId == ((ShadowObject) obj).shadowId;
+        }
+
+        return false;
+    }
 
     //
-    
+
     @Override
     public void formatTo (
-        final Formatter formatter, 
+        final Formatter formatter,
         final int flags, final int width, final int precision
     ) {
         formatter.format ("%s@%x", (shadowClass != null) ? shadowClass.getName () : "<missing>", shadowId);

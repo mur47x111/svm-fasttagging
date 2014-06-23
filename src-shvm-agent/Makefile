@@ -59,7 +59,8 @@ endif
 
 # Source and object files needed to create the library
 SOURCES = buffer.c buffpack.c netref.c common.c jvmtiutil.c \
-	blockingqueue.c svmconnector.c dislreagent.c processbuffs.c
+	blockingqueue.c sender.c dislreagent.c processbuffs.c \
+	tagger.c
 
 HEADERS = $(wildcard *.h)
 GENSRCS =
@@ -93,8 +94,8 @@ endif
 CFLAGS += -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/$(JDK_TARGET)
 
 # Source code options
-CFLAGS += -W -Wall -Wextra -Wno-unused-parameter
-#CFLAGS += -std=gnu99 -W -Wall -Wextra -Wno-unused-parameter
+#CFLAGS += -W -Wall -Wextra -Wno-unused-parameter
+CFLAGS += -std=gnu99 -W -Wall -Wextra -Wno-unused-parameter
 
 # Fix-up quirks before first target
 -include Makefile.quirks

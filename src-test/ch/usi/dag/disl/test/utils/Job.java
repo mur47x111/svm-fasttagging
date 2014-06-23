@@ -74,7 +74,7 @@ final class Job {
      * @throws IOException
      *         if a problem occurs while trying to execute the job command
      */
-    public void start () throws IOException {
+    public Job start () throws IOException {
         __ensureJobNotStarted();
 
         //
@@ -127,6 +127,7 @@ final class Job {
         });
 
         __waiter.start ();
+        return this;
     }
 
 

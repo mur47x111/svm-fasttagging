@@ -2,8 +2,9 @@
 #include <pthread.h>
 
 #include <netdb.h>
+#include <unistd.h>
 
-#include "svmconnector.h"
+#include "sender.h"
 #include "jvmtiutil.h"
 #include "processbuffs.h"
 
@@ -56,11 +57,18 @@ static void parse_agent_options(char *options) {
   strcpy(host_name, options);
 }
 
-static void _send_buffer(int connection, buffer * b) {
-
+static void _send_buffer(buffer * b) {
   // send data
   // NOTE: normally access the buffer using methods
-  send_data(connection, b->buff, b->occupied);
+  size_t sent = 0;
+
+  while (sent != b->occupied) {
+
+    int res = send(sockfd, ((unsigned char *) b->buff) + sent,
+        (b->occupied - sent), 0);
+    check_std_error(res == -1, "Error while sending data to server");
+    sent += res;
+  }
 }
 
 static void open_connection() {
@@ -94,7 +102,7 @@ static void close_connection() {
   pack_byte(buff, MSG_CLOSE);
 
   // send buffer directly
-  _send_buffer(sockfd, buff);
+  _send_buffer(buff);
 
   // release buffer
   _buffs_release(buffs);
@@ -103,7 +111,7 @@ static void close_connection() {
   close(sockfd);
 }
 
-static void * svm_send(void * obj) {
+static void *svm_send(void * obj) {
   open_connection();
 
   // exit when the jvm is terminated and there are no msg to process
@@ -116,9 +124,9 @@ static void * svm_send(void * obj) {
     process_buffs * pb = _buffs_send_get();
 
     // first send command buffer - contains new class or object ids,...
-    _send_buffer(sockfd, pb->command_buff);
+    _send_buffer(pb->command_buff);
     // send analysis buffer
-    _send_buffer(sockfd, pb->analysis_buff);
+    _send_buffer(pb->analysis_buff);
 
     // release (enqueue) buffer according to the type
     if (pb->owner_id == PB_UTILITY) {
@@ -134,14 +142,14 @@ static void * svm_send(void * obj) {
   return NULL;
 }
 
-void svm_connect(char *options) {
+void sender_connect(char *options) {
   parse_agent_options(options);
   // start sending thread
   int res = pthread_create(&sender, NULL, svm_send, NULL);
   check_error(res != 0, "Cannot create sending thread");
 }
 
-void svm_disconnect() {
+void sender_disconnect() {
   no_sending_work = 1;
 
   // TODO if multiple sending threads, multiple empty buffers have to be send

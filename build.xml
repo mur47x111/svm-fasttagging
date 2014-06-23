@@ -22,6 +22,10 @@
 		<pathelement location="${asm.path}" />
 	</path>
 
+	<path id="log4j.classpath">
+		<pathelement location="${log4j.path}" />
+	</path>
+
 	<path id="junit.classpath">
 		<pathelement location="${junit.core.path}" />
 		<pathelement location="${junit.hamcrest.path}" />
@@ -202,7 +206,9 @@
 
 	<target name="compile-util">
 		<mkdir dir="${build.util}" />
-		<javac destdir="${build.util}" srcdir="${src.util}" debug="true" />
+		<javac destdir="${build.util}" srcdir="${src.util}" debug="true">
+			<classpath refid="log4j.classpath" />
+		</javac>
 	</target>
 
 
@@ -223,6 +229,7 @@
 	<target name="build-disl" depends="compile-disl,build-disl-bypass">
 		<local name="disl.server.class" />
 		<find-class property="disl.server.class" dir="${build.disl}" name="DiSLServer" />
+		<find-class property="disl.classfinder.class" dir="${build.disl}" name="DislClassFinder" />
 
 		<jar destfile="${out.lib}/${disl.lib}">
 			<manifest>
@@ -231,8 +238,10 @@
 				<attribute name="DiSL-Version" value="${disl.version}" />
 			</manifest>
 
+			<service type="javax.annotation.processing.Processor" provider="${disl.classfinder.class}" />
+
 			<fileset dir="${build.util}" />
-			<fileset dir="${build.disl}" excludes="**/ExtendThread.class" />
+			<fileset dir="${build.disl}" />
 			<resources refid="disl.bypass.files" />
 		</jar>
 	</target>
@@ -374,9 +383,10 @@
 	</target>
 
 
-	<target name="compile-shvm" depends="compile-shvm-dispatch">
+	<target name="compile-shvm" depends="compile-util,compile-shvm-dispatch">
 		<mkdir dir="${build.shvm}" />
 		<javac destdir="${build.shvm}" srcdir="${src.shvm}" debug="true">
+			<classpath refid="util.classpath" />
 			<classpath refid="asm.classpath" />
 		</javac>
 	</target>
@@ -386,12 +396,15 @@
 		<local name="shvm.server.class" />
 		<find-class property="shvm.server.class" dir="${build.shvm}" name="DiSLREServer" />
 
-		<jar destfile="${out.lib}/${shvm.lib}" basedir="${build.shvm}">
+		<jar destfile="${out.lib}/${shvm.lib}">
 			<manifest>
 				<attribute name="Class-Path" value="${asm.lib}" />
 				<attribute name="Main-Class" value="${shvm.server.class}" />
 				<attribute name="DiSL-Version" value="${disl.version}" />
 			</manifest>
+
+			<fileset dir="${build.util}" />
+			<fileset dir="${build.shvm}" />
 		</jar>
 	</target>
 
@@ -411,16 +424,18 @@
 
 	<!-- JUnit tests and DiSL/Shadow VM test suites -->
 
+	<path id="test.classpath">
+		<path refid="util.classpath" />
+		<path refid="disl.classpath" />
+		<path refid="shvm.classpath" />
+		<path refid="junit.classpath" />
+		<path refid="asm.classpath" />
+	</path>
+
 	<target name="compile-test" depends="compile-util,compile-disl,compile-shvm">
 		<mkdir dir="${build.test}" />
 		<javac destdir="${build.test}" srcdir="${src.test}" debug="true">
-			<classpath>
-				<path refid="util.classpath" />
-				<path refid="disl.classpath" />
-				<path refid="shvm.classpath" />
-				<path refid="junit.classpath" />
-				<path refid="asm.classpath" />
-			</classpath>
+			<classpath refid="test.classpath" />
 		</javac>
 
 		<!-- Copy test resource files from source to class output directory. -->
@@ -480,34 +495,43 @@
 			</manifest>
 		</jar>
 
-		<!-- Package instrumentation classes. -->
-		<property name="inst.jar" value="${out.test}/${test.suite.name}-inst.jar" />
-		<property name="inst.manifest" value="${test.suite.path}/instr/MANIFEST.MF" />
-
-		<fileset id="inst.files" dir="${build.test}">
-			<include name="${test.suite.path}/instr/**" />
-			<exclude name="${inst.manifest}" />
-		</fileset>
 
 		<!--
-			If the suite has a MANIFEST.MF, use it when creating the instrumentation
-			jar file, otherwise generate a manifest with a default DiSL class.
+			Process annotations to find DiSL classes.
+
+			Use an empty directory as destination for the classes to
+			make the "javac" task actually execute "javac" with the
+			source files. Using the normal build destination directory
+			would result in "javac" task excluding all source files
+			for which it could find up-to-date class files.
 		-->
-		<if>
-			<available file="${src.test}/${inst.manifest}" />
-			<then>
-				<jar destfile="${inst.jar}" manifest="${src.test}/${inst.manifest}">
-					<fileset refid="inst.files" />
-				</jar>
-			</then><else>
-				<jar destfile="${inst.jar}">
-					<fileset refid="inst.files" />
-					<manifest>
-						<attribute name="DiSL-Classes" value="${test.suite.pkg}.instr.DiSLClass" />
-					</manifest>
-				</jar>
-			</else>
-		</if>
+		<tempfile property="disl.classfinder.output" destDir="${out.dir}" createFile="true" deleteOnExit="true" />
+		<find-class property="disl.classfinder.class" dir="${build.disl}" name="DislClassFinder" />
+
+		<mkdir dir="${out.dir}/empty" />
+		<javac srcdir="${src.test}" destDir="${out.dir}/empty">
+			<classpath refid="test.classpath" />
+
+			<compilerArg value="-proc:only" />
+			<compilerArg line="-processor ${disl.classfinder.class}" />
+			<compilerArg value="-Adisl.classfinder.output=${disl.classfinder.output}" />
+			<compilerArg value="-Adisl.classfinder.separator=," />
+
+			<include name="${test.suite.path}/**/*.java" />
+		</javac>
+
+		<loadfile property="disl.classes" srcFile="${disl.classfinder.output}" />
+
+
+		<!-- Package instrumentation classes. -->
+		<property name="inst.jar" value="${out.test}/${test.suite.name}-inst.jar" />
+		<jar destfile="${inst.jar}">
+			<manifest>
+				<attribute name="DiSL-Classes" value="${disl.classes}" />
+			</manifest>
+
+			<fileset dir="${build.test}" includes="${test.suite.path}/instr/**" />
+		</jar>
 	</target>
 
 

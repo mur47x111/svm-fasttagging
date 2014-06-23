@@ -1,4 +1,4 @@
-package ch.usi.dag.disl.utilinstr.codemerger;
+package ch.usi.dag.disl;
 
 import java.util.List;
 import java.util.Set;
@@ -18,7 +18,7 @@ import ch.usi.dag.disl.dynamicbypass.BypassCheck;
 import ch.usi.dag.disl.exception.DiSLFatalException;
 import ch.usi.dag.disl.util.AsmHelper.ClonedCode;
 
-public abstract class CodeMerger {
+abstract class CodeMerger {
 
 	private static final String BPC_CLASS = Type.getInternalName (BypassCheck.class);
 	private static final String BPC_METHOD = "executeUninstrumented";

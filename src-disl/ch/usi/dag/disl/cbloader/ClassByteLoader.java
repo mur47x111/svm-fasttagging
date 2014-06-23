@@ -15,7 +15,7 @@ public abstract class ClassByteLoader {
 
 	public static final String PROP_DISL_CLASSES = "disl.classes";
 	
-	public static final String DISL_CLASSES_DELIM = ":";
+	public static final String DISL_CLASSES_DELIM = ",";
 	public static final String DISL_CLASSES_EXT = ".class";
 	public static final char CLASS_DELIM = '.';
 	public static final char FILE_DELIM = '/';

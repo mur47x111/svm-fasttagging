@@ -1,10 +1,8 @@
 #ifndef _SVMCONNECTOR_H_
 #define _SVMCONNECTOR_H_
 
-void
-svm_connect(char *options);
+void sender_connect(char *options);
 
-void
-svm_disconnect();
+void sender_disconnect();
 
 #endif /* _SVMCONNECTOR_H_ */

@@ -7,6 +7,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import ch.usi.dag.dislreserver.DiSLREServer;
 import ch.usi.dag.dislserver.DiSLServer;
@@ -18,6 +19,7 @@ public abstract class Runner {
 
     protected static final Duration _INIT_TIME_LIMIT_ = Duration.of (3, SECONDS);
     protected static final Duration _TEST_TIME_LIMIT_ = Duration.of (60, SECONDS);
+    protected static final Duration _WATCH_DELAY_ = Duration.of (100, TimeUnit.MILLISECONDS);
 
     protected static final String _ENV_JAVA_HOME_ = "JAVA_HOME";
     protected static final String _JAVA_COMMAND_ = __getJavaCommand ();
@@ -205,6 +207,16 @@ public abstract class Runner {
 
     static String classPath (final File ... paths) {
         return Strings.join (File.pathSeparator, (Object []) paths);
+    }
+
+
+    static boolean watchFile (final File file, final Duration duration) {
+        final long watchEnd = System.nanoTime () + duration.to (TimeUnit.NANOSECONDS);
+        while (file.exists () &&  System.nanoTime () < watchEnd) {
+            _WATCH_DELAY_.sleepUninterruptibly ();
+        }
+
+        return file.exists ();
     }
 
 }

@@ -370,7 +370,7 @@ public abstract class AsmHelper {
         final String ownerName, final String methodName, final String methodDesc
     ) {
         return new MethodInsnNode (
-            Opcodes.INVOKESTATIC, ownerName, methodName, methodDesc
+            Opcodes.INVOKESTATIC, ownerName, methodName, methodDesc, false
         );
     }
 
@@ -396,7 +396,7 @@ public abstract class AsmHelper {
         final String ownerName, final String methodName, final String methodDesc
     ) {
         return new MethodInsnNode (
-            Opcodes.INVOKEVIRTUAL, ownerName, methodName, methodDesc
+            Opcodes.INVOKEVIRTUAL, ownerName, methodName, methodDesc, false
         );
     }
 

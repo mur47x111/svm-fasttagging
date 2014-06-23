@@ -9,32 +9,32 @@ import ch.usi.dag.dislreserver.msg.analyze.AnalysisInvocation;
  */
 class AnalysisTask {
 
-	protected boolean signalsEnd = false;
-	protected List<AnalysisInvocation> invocations;
-	protected long epoch;
-	
-	/**
-	 * Constructed task signals end of the processing
-	 */
-	public AnalysisTask() {
-		signalsEnd = true;
-	}
-	
-	public AnalysisTask(List<AnalysisInvocation> invocations, long epoch) {
-		super();
-		this.invocations = invocations;
-		this.epoch = epoch;
-	}
+    protected boolean signalsEnd = false;
+    protected List<AnalysisInvocation> invocations;
+    protected long epoch;
 
-	public boolean isSignalingEnd() {
-		return signalsEnd;
-	}
-	
-	public List<AnalysisInvocation> getInvocations() {
-		return invocations;
-	}
+    /**
+     * Constructed task signals end of the processing
+     */
+    public AnalysisTask() {
+        signalsEnd = true;
+    }
 
-	public long getEpoch() {
-		return epoch;
-	}
+    public AnalysisTask(List<AnalysisInvocation> invocations, long epoch) {
+        super();
+        this.invocations = invocations;
+        this.epoch = epoch;
+    }
+
+    public boolean isSignalingEnd() {
+        return signalsEnd;
+    }
+
+    public List<AnalysisInvocation> getInvocations() {
+        return invocations;
+    }
+
+    public long getEpoch() {
+        return epoch;
+    }
 }

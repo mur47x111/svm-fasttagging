@@ -12,6 +12,7 @@
 #include "buffpack.h"
 #include "messagetype.h"
 
+#define NULL_NET_REF 0
 
 // ******************* Net reference routines *******************
 

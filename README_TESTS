@@ -26,7 +26,7 @@ packed in the "build-test" directory.
 Implementation
 ==============
 
-Implementation is a bit tricky in few aspects. 
+Implementation is a bit tricky in few aspects.
 
 Firstly, building of suite test apps and instrumentations is handled by a
 scripted target that lists all directories in a "ch.usi.dag.disl.test.suite"
@@ -36,6 +36,8 @@ Secondly, when running the instances of client and server using Process API,
 never forget to clear environment variables as inherited classpath could cause
 serious trouble.
 
-If a suite instr source directory contains a manifest file, it will be used
-when packaging the instrumentation into a jar, otherwise a default manifest
-will be used, with the "DiSL-Classes" attribute set to "DiSLClass".
+The manifest file in the instrumentation jars for each suite will contain an
+attribute, DiSL-Classes, listing binary names of classes that are used for
+snippet expansion. The comma-separated list of classes is generated
+automatically by the build system based on snippet-related annotations used in
+the instrumentation classes.

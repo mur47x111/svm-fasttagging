@@ -1,12 +1,16 @@
 \documentclass{article}
-
-\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
+\usepackage{fullpage}
+\usepackage[english]{babel}
+\usepackage[babel]{microtype}
 
+%\usepackage[T1]{fontenc}
 \usepackage{relsize}
 \usepackage{lmodern}
-\usepackage[babel]{microtype}
 \usepackage{comment}
+
+\usepackage{titlesec}
+\titleformat*{\section}{\large\bfseries}
 
 \clubpenalty = 10000
 \widowpenalty = 10000
@@ -646,8 +650,10 @@ It is possible to use the \code{disl.py} script to invoke DiSL with user-defined
 \item All the instrumentation and the analysis classes must be packed into a single jar~file, including any external libraries used by the analysis.
 Such libraries can be added to the jar~file using, for example, the \code{jarjar}\footnote{\url{http://code.google.com/p/jarjar/}} tool.
 
-\item The \code{MANIFEST.MF} file in the \code{META-INF} directory of the jar~file must list all the DiSL classes used for the instrumentation; Listing~\ref{lst:example-manifest} shows the manifest file of the included example.
+\item The \code{MANIFEST.MF} file in the \code{META-INF} directory of the jar~file must list fully qualified binary names\footnote{\url{http://docs.oracle.com/javase/specs/jls/se8/html/jls-13.html\#jls-13.1}} of all DiSL instrumentation classes, i.e., classes containing snippets or argument processors.
+Listing~\ref{lst:example-manifest} shows the manifest file of the included example.
 In this case, the instrumentation consists of a single class (i.e., \code{DiSLClass}) that can be found in the default package.
+In more complex cases, the \code{DiSL-Classes} attribute will contain a comma-separated list of class binary names.
 \end{itemize}
 
 Run \code{disl.py -h} for info how to use the script and to list all available parameters.

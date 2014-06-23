@@ -6,61 +6,61 @@ import java.io.IOException;
 
 public class InstrMsgReader {
 
-	public static class InstrClassMessage {
-	    
-		private byte[] control;
-	    private byte[] classCode;
+    public static class InstrClassMessage {
 
-	    public InstrClassMessage(byte[] control, byte[] classCode) {
-	        this.control = control;
-	        this.classCode = classCode;
-	    }
+        private byte[] control;
+        private byte[] classCode;
 
-		public byte[] getControl() {
-			return control;
-		}
+        public InstrClassMessage(byte[] control, byte[] classCode) {
+            this.control = control;
+            this.classCode = classCode;
+        }
 
-		public byte[] getClassCode() {
-			return classCode;
-		}
-	}
-	
-	public static InstrClassMessage readMessage(DataInputStream is) throws IOException {
+        public byte[] getControl() {
+            return control;
+        }
 
-		// protocol:
-		// java int - control string length (ctl)
-		// java int - class code length (ccl)
-		// bytes[ctl] - control string (contains class name)
-		// bytes[ccl] - class code
-		
-		int controlLength = is.readInt();
-		int classCodeLength = is.readInt();
-		
-		// allocate buffer for class reading
-		byte[] control = new byte[controlLength];
-		byte[] classCode = new byte[classCodeLength];
+        public byte[] getClassCode() {
+            return classCode;
+        }
+    }
 
-		// read class
-		is.readFully(control);
-		is.readFully(classCode);
+    public static InstrClassMessage readMessage(DataInputStream is) throws IOException {
 
-		return new InstrClassMessage(control, classCode);
-	}
+        // protocol:
+        // java int - control string length (ctl)
+        // java int - class code length (ccl)
+        // bytes[ctl] - control string (contains class name)
+        // bytes[ccl] - class code
 
-	public static void sendMessage(DataOutputStream os, InstrClassMessage icm)
-			throws IOException {
+        int controlLength = is.readInt();
+        int classCodeLength = is.readInt();
 
-		// protocol:
-		// java int - control string (ctl)
-		// java int - class code length (ccl)
-		// bytes[ctl] - control string
-		// bytes[ccl] - class code
-		
-		os.writeInt(icm.getControl().length);
-		os.writeInt(icm.getClassCode().length);
-		
-		os.write(icm.getControl());
-		os.write(icm.getClassCode());
-		os.flush();
-	}
+        // allocate buffer for class reading
+        byte[] control = new byte[controlLength];
+        byte[] classCode = new byte[classCodeLength];
+
+        // read class
+        is.readFully(control);
+        is.readFully(classCode);
+
+        return new InstrClassMessage(control, classCode);
+    }
+
+    public static void sendMessage(DataOutputStream os, InstrClassMessage icm)
+            throws IOException {
+
+        // protocol:
+        // java int - control string (ctl)
+        // java int - class code length (ccl)
+        // bytes[ctl] - control string
+        // bytes[ccl] - class code
+
+        os.writeInt(icm.getControl().length);
+        os.writeInt(icm.getClassCode().length);
+
+        os.write(icm.getControl());
+        os.write(icm.getClassCode());
+        os.flush();
+    }
 }
