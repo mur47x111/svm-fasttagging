@@ -171,7 +171,9 @@ static void ot_relese_global_ref(JNIEnv * jni_env, buffer * cmd_buff) {
   }
 }
 
-static void * objtag_thread_loop(void * obj) {
+static blocking_queue objtag_q;
+
+static void * tagger_loop(void * obj) {
 
   // attach thread to jvm
   JNIEnv *jni_env;
@@ -195,12 +197,12 @@ static void * objtag_thread_loop(void * obj) {
   while (!(no_tagging_work && bq_length(&objtag_q) == 0)) {
 
     // get buffer - before tagging lock
-    process_buffs * pb = _buffs_objtag_get();
+    process_buffs * pb;
+    bq_pop(&objtag_q, &pb);
 
     // tag the objects - with lock
     enter_critical_section(jvmti_env, tagging_lock);
     {
-
       // tag objcects from buffer
       // note that analysis buffer is not required
       ot_tag_buff(jni_env, pb->analysis_buff, pb->command_buff, new_obj_buff);
@@ -239,10 +241,12 @@ void tagger_init(JavaVM * jvm, jvmtiEnv * env) {
   jvmtiError error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "object tags",
       &tagging_lock);
   check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
+
+  bq_create(&objtag_q, BQ_BUFFERS, sizeof(process_buffs *));
 }
 
 void tagger_connect() {
-  int res = pthread_create(&objtag_thread, NULL, objtag_thread_loop, NULL);
+  int res = pthread_create(&objtag_thread, NULL, tagger_loop, NULL);
   check_error(res != 0, "Cannot create tagging thread");
 }
 
@@ -251,10 +255,15 @@ void tagger_disconnect() {
 
   // send empty buff to obj_tag thread -> ensures exit if waiting
   process_buffs * buffs = buffs_get(0);
-  buffs_objtag(buffs);
+  tagger_enqueue(buffs);
 
   int res = pthread_join(objtag_thread, NULL);
   check_error(res != 0, "Cannot join tagging thread.");
+}
+
+void tagger_enqueue(process_buffs * buffs) {
+  buffs->owner_id = PB_OBJTAG;
+  bq_push(&objtag_q, &buffs);
 }
 
 void tagger_jvmstart() {

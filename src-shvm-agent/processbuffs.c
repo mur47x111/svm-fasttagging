@@ -39,15 +39,3 @@ void _buffs_release(process_buffs * buffs) {
   buffs->owner_id = PB_FREE;
   bq_push(&empty_q, &buffs);
 }
-
-void buffs_objtag(process_buffs * buffs) {
-  buffs->owner_id = PB_OBJTAG;
-  bq_push(&objtag_q, &buffs);
-}
-
-// only objtag thread should access this function
-process_buffs * _buffs_objtag_get() {
-  process_buffs * buffs;
-  bq_pop(&objtag_q, &buffs);
-  return buffs;
-}

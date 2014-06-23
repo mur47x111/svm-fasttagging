@@ -221,7 +221,7 @@ void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
     tld->command_buff = NULL;
 
     // send buffers for object tagging
-    buffs_objtag(tld->pb);
+    tagger_enqueue(tld->pb);
 
     // invalidate buffer pointer
     tld->pb = NULL;
@@ -396,7 +396,7 @@ static void analysis_end_buff(struct tldata * tld) {
     if (tobs->analysis_count >= ANALYSIS_COUNT) {
 
       // send buffers for object tagging
-      buffs_objtag(tobs->pb);
+      tagger_enqueue(tobs->pb);
 
       // invalidate buffer pointer
       tobs->pb = NULL;
@@ -450,7 +450,7 @@ static void analysis_end(struct tldata * tld) {
     tld->command_buff = NULL;
 
     // send buffers for object tagging
-    buffs_objtag(tld->pb);
+    tagger_enqueue(tld->pb);
 
     // invalidate buffer pointer
     tld->pb = NULL;
@@ -722,7 +722,7 @@ static void send_all_to_buffers() {
       if (to_buff_array[i].pb != NULL) {
 
         // send buffers for object tagging
-        buffs_objtag(to_buff_array[i].pb);
+        tagger_enqueue(to_buff_array[i].pb);
 
         // invalidate buffer pointer
         to_buff_array[i].pb = NULL;
@@ -742,7 +742,7 @@ static void send_thread_buffers(struct tldata * tld) {
     for (i = 0; i < BQ_BUFFERS; ++i) {
       // if buffer is owned by tagged thread, send it
       if (pb_list[i].owner_id == thread_id) {
-        buffs_objtag(&(pb_list[i]));
+        tagger_enqueue(&(pb_list[i]));
       }
     }
   }
@@ -897,7 +897,7 @@ void JNICALL jvmti_callback_thread_end_hook(jvmtiEnv *jvmti_env,
 
   // send to object tagging queue - this thread could have something still
   // in the queue so we ensure proper ordering
-  buffs_objtag(buffs);
+  tagger_enqueue(buffs);
 }
 
 // ******************* JVMTI entry method *******************
@@ -1010,7 +1010,6 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   // init blocking queues
   bq_create(&utility_q, BQ_UTILITY, sizeof(process_buffs *));
   bq_create(&empty_q, BQ_BUFFERS, sizeof(process_buffs *));
-  bq_create(&objtag_q, BQ_BUFFERS, sizeof(process_buffs *));
 
   // allocate buffers and add to the empty and utility buffer queues
   int i;
