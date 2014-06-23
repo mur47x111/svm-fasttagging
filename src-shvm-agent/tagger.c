@@ -4,6 +4,7 @@
 #include "tagger.h"
 
 #include "processbuffs.h"
+#include "sender.h"
 
 static jclass THREAD_CLASS = NULL;
 static jclass STRING_CLASS = NULL;
@@ -209,7 +210,7 @@ static void * objtag_thread_loop(void * obj) {
       pb->command_buff = new_obj_buff;
 
       // send buffer
-      _buffs_send(pb);
+      sender_enqueue(pb);
 
       // global references are released after buffer is send
       // this is critical for ensuring that proper ordering of events
@@ -294,7 +295,7 @@ void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
     pack_bytes(buff, class_data, class_data_len);
 
     // send message
-    buffs_utility_send(buffs);
+    sender_enqueue(buffs);
   }
   exit_critical_section(jvmti_env, tagging_lock);
 }

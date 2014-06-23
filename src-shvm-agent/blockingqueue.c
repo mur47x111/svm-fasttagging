@@ -24,9 +24,8 @@ static inline void _bq_monitor_notify_all(blocking_queue * bq) {
 
 // ** Blocking queue functions **
 
-void bq_create(jvmtiEnv *jvmti, blocking_queue * bq, size_t queue_capacity,
+void bq_create(blocking_queue * bq, size_t queue_capacity,
     size_t queue_element_size) {
-
   check_std_error(bq == NULL, "Invalid blocking queue structure");
 
   bq->qarray = malloc(queue_capacity * queue_element_size);

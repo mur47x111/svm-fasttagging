@@ -16,9 +16,6 @@
 // queue with empty buffers
 blocking_queue empty_q;
 
-// queue where buffers are queued for sending
-blocking_queue send_q;
-
 // queue where buffers are queued for object
 blocking_queue objtag_q;
 

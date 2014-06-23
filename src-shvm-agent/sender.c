@@ -8,6 +8,8 @@
 #include "jvmtiutil.h"
 #include "processbuffs.h"
 
+// ******************* Communication *******************
+
 // defaults - be sure that space in host_name is long enough
 static const char * DEFAULT_HOST = "localhost";
 static const char * DEFAULT_PORT = "11218";
@@ -16,14 +18,9 @@ static const char * DEFAULT_PORT = "11218";
 static char host_name[1024];
 static char port_number[6]; // including final 0
 
-static pthread_t sender;
 static int sockfd;
 
-static volatile int no_sending_work = 0;
-
 static void parse_agent_options(char *options) {
-  static const char PORT_DELIM = ':';
-
   // assign defaults
   strcpy(host_name, DEFAULT_HOST);
   strcpy(port_number, DEFAULT_PORT);
@@ -33,7 +30,7 @@ static void parse_agent_options(char *options) {
     return;
   }
 
-  char * port_start = strchr(options, PORT_DELIM);
+  char * port_start = strchr(options, ':');
 
   // process port number
   if (port_start != NULL) {
@@ -63,7 +60,6 @@ static void _send_buffer(buffer * b) {
   size_t sent = 0;
 
   while (sent != b->occupied) {
-
     int res = send(sockfd, ((unsigned char *) b->buff) + sent,
         (b->occupied - sent), 0);
     check_std_error(res == -1, "Error while sending data to server");
@@ -72,7 +68,6 @@ static void _send_buffer(buffer * b) {
 }
 
 static void open_connection() {
-
   // get host address
   struct addrinfo * addr;
   int gai_res = getaddrinfo(host_name, port_number, NULL, &addr);
@@ -91,12 +86,9 @@ static void open_connection() {
 }
 
 static void close_connection() {
-
-  // send close message
-
   // obtain buffer
-  process_buffs * buffs = buffs_get(0);
-  buffer * buff = buffs->command_buff;
+  process_buffs * pb = buffs_get(0);
+  buffer * buff = pb->command_buff;
 
   // msg id
   pack_byte(buff, MSG_CLOSE);
@@ -105,23 +97,30 @@ static void close_connection() {
   _send_buffer(buff);
 
   // release buffer
-  _buffs_release(buffs);
+  _buffs_release(pb);
 
   // close socket
   close(sockfd);
 }
 
-static void *svm_send(void * obj) {
+// ******************* Sender routines *******************
+
+static pthread_t sender;
+blocking_queue send_q;
+
+static volatile int no_sending_work = 0;
+
+static void *sender_loop(void * obj) {
   open_connection();
 
   // exit when the jvm is terminated and there are no msg to process
   while (!(no_sending_work && bq_length(&send_q) == 0)) {
-
     // get buffer
     // TODO thread could timeout here with timeout about 5 sec and check
     // if all of the buffers are allocated by the application threads
     // and all application threads are waiting on free buffer - deadlock
-    process_buffs * pb = _buffs_send_get();
+    process_buffs * pb;
+    bq_pop(&send_q, &pb);
 
     // first send command buffer - contains new class or object ids,...
     _send_buffer(pb->command_buff);
@@ -142,10 +141,14 @@ static void *svm_send(void * obj) {
   return NULL;
 }
 
-void sender_connect(char *options) {
+void sender_init(char *options) {
   parse_agent_options(options);
-  // start sending thread
-  int res = pthread_create(&sender, NULL, svm_send, NULL);
+
+  bq_create(&send_q, BQ_BUFFERS + BQ_UTILITY, sizeof(process_buffs *));
+}
+
+void sender_connect() {
+  int res = pthread_create(&sender, NULL, sender_loop, NULL);
   check_error(res != 0, "Cannot create sending thread");
 }
 
@@ -158,9 +161,17 @@ void sender_disconnect() {
 
   // send empty buff to sending thread -> ensures exit if waiting
   process_buffs *buffs = buffs_get(0);
-  _buffs_send(buffs);
+  sender_enqueue(buffs);
 
   // wait for thread end
   int res = pthread_join(sender, NULL);
   check_error(res != 0, "Cannot join sending thread.");
+}
+
+void sender_enqueue(process_buffs * pb) {
+  if (pb->owner_id != PB_UTILITY) {
+    pb->owner_id = PB_SEND;
+  }
+
+  bq_push(&send_q, &pb);
 }
