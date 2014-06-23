@@ -11,7 +11,6 @@
 #include "jvmtiutil.h"
 
 typedef struct {
-
 	// array of elements
 	char * qarray;
 	size_t qa_size;
@@ -23,19 +22,7 @@ typedef struct {
 	pthread_mutex_t mutex;
 	pthread_cond_t cond;
 
-	jvmtiEnv * jvmti;
-
 } blocking_queue;
-
-// ** Monitor helper functions **
-
-void _bq_monitor_enter(blocking_queue * bq);
-
-void _bq_monitor_exit(blocking_queue * bq);
-
-void _bq_monitor_wait(blocking_queue * bq);
-
-void _bq_monitor_notify_all(blocking_queue * bq);
 
 // ** Blocking queue functions **
 
