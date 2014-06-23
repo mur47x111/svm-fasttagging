@@ -1,16 +1,10 @@
 #ifndef _NETREF_H
 #define	_NETREF_H
 
-#include <stdint.h>
-
 #include <jvmti.h>
 #include <jni.h>
 
-#include "../src-disl-agent/jvmtiutil.h"
-
 #include "buffer.h"
-#include "buffpack.h"
-#include "messagetype.h"
 
 #define NULL_NET_REF 0
 

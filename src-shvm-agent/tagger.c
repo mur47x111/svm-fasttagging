@@ -1,10 +1,17 @@
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "netref.h"
-#include "tagger.h"
 
+#include "blockingqueue.h"
+#include "buffpack.h"
 #include "processbuffs.h"
+#include "messagetype.h"
+
+#include "tagger.h"
 #include "sender.h"
+
+#include "../src-disl-agent/jvmtiutil.h"
 
 static jclass THREAD_CLASS = NULL;
 static jclass STRING_CLASS = NULL;

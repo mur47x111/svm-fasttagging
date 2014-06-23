@@ -1,4 +1,12 @@
+#include <stdint.h>
+#include <string.h>
+
 #include "netref.h"
+
+#include "../src-disl-agent/jvmtiutil.h"
+
+#include "buffpack.h"
+#include "messagetype.h"
 
 
 // first available object id

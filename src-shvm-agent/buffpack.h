@@ -20,20 +20,19 @@
 //#error "Requires IEEE 754 floating point!"
 //#endif
 
-#include "../src-disl-agent/jvmtiutil.h"
+#include <stdint.h>
+#include <jvmti.h>
 
 #include "buffer.h"
 
 // interpret bytes differently
 union float_jint {
-
 	float f;
 	jint i;
 };
 
 // interpret bytes differently
 union double_jlong {
-
 	double d;
 	jlong l;
 };

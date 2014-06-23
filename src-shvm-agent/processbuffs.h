@@ -4,12 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <jvmti.h>
+
 #include "buffer.h"
-
-#include "../src-disl-agent/jvmtiutil.h"
-#include "netref.h"
-
-#include "blockingqueue.h"
 
 // queues contain process_buffs structure
 

@@ -1,4 +1,8 @@
 #include "processbuffs.h"
+#include "blockingqueue.h"
+#include "netref.h"
+
+#include "../src-disl-agent/jvmtiutil.h"
 
 // queue with empty buffers
 static blocking_queue empty_q;

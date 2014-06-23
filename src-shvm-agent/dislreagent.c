@@ -1014,21 +1014,13 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   pb_init();
 
   // allocate buffers and add to the empty and utility buffer queues
-  int i;
-  for (i = 0; i < BQ_BUFFERS + BQ_UTILITY; ++i) {
-
+  for (int i = 0; i < BQ_BUFFERS + BQ_UTILITY; ++i) {
     process_buffs * pb = &(pb_list[i]);
 
     // allocate process_buffs
-
-    // allocate space for buffer struct
     pb->analysis_buff = malloc(sizeof(buffer));
-    // allocate buffer
     buffer_alloc(pb->analysis_buff);
-
-    // allocate space for buffer struct
     pb->command_buff = malloc(sizeof(buffer));
-    // allocate buffer
     buffer_alloc(pb->command_buff);
 
     if (i < BQ_BUFFERS) {
@@ -1041,7 +1033,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   }
 
   // initialize total ordering buff array
-  for (i = 0; i < TO_BUFFER_COUNT; ++i) {
+  for (int i = 0; i < TO_BUFFER_COUNT; ++i) {
     to_buff_array[i].pb = NULL;
   }
 

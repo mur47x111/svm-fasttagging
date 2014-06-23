@@ -8,6 +8,10 @@
 #include "../src-disl-agent/jvmtiutil.h"
 #include "processbuffs.h"
 
+#include "buffpack.h"
+#include "blockingqueue.h"
+#include "messagetype.h"
+
 // ******************* Communication *******************
 
 // defaults - be sure that space in host_name is long enough

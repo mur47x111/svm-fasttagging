@@ -1,14 +1,7 @@
 #ifndef _BLOCKINGQUEUE_H
 #define	_BLOCKINGQUEUE_H
 
-#include <string.h>
-
 #include <pthread.h>
-
-#include <jvmti.h>
-#include <jni.h>
-
-#include "../src-disl-agent/jvmtiutil.h"
 
 typedef struct {
   // array of elements
