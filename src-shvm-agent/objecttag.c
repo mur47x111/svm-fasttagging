@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "netref.h"
+#include "objecttag.h"
 
 #include "shared/buffpack.h"
 #include "shared/messagetype.h"
@@ -107,13 +107,12 @@ void net_ref_set_spec(jlong * net_ref, unsigned char spec) {
 
 // only retrieves object tag data
 jlong get_tag(jvmtiEnv * jvmti_env, jobject obj) {
+  jlong tag;
 
-	jlong net_ref;
+  jvmtiError error = (*jvmti_env)->GetTag(jvmti_env, obj, &tag);
+  check_jvmti_error(jvmti_env, error, "Cannot get object tag");
 
-	jvmtiError error = (*jvmti_env)->GetTag(jvmti_env, obj, &net_ref);
-	check_jvmti_error(jvmti_env, error, "Cannot get object tag");
-
-	return net_ref;
+  return tag;
 }
 
 // forward declaration

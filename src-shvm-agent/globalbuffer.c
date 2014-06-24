@@ -86,7 +86,7 @@ void glbuffer_commit() {
         tld->local_pb->command_buff->buff,
         tld->local_pb->command_buff->occupied);
 
-    // empty local buffers
+    // empty local buffers (cheap)
     buffer_clean(tld->local_pb->analysis_buff);
     buffer_clean(tld->local_pb->command_buff);
 

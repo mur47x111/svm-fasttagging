@@ -4,7 +4,7 @@
 #include "shared/messagetype.h"
 #include "shared/threadlocal.h"
 
-#include "netref.h"
+#include "objecttag.h"
 #include "globalbuffer.h"
 #include "tlocalbuffer.h"
 #include "pbmanager.h"

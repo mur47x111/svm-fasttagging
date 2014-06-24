@@ -7,7 +7,7 @@
 #include "shared/buffpack.h"
 #include "shared/messagetype.h"
 
-#include "netref.h"
+#include "objecttag.h"
 #include "pbmanager.h"
 #include "sender.h"
 
@@ -257,29 +257,29 @@ void tagger_jvmstart() {
 
 void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
     const char* name, jint class_data_len, const unsigned char* class_data) {
-  // tag the class loader - with lock
-  enter_critical_section(jvmti_env, tagging_lock);
-  {
-    // retrieve class loader net ref
-    jlong loader_id = NULL_NET_REF;
+  // retrieve class loader net ref
+  jlong loader_id = NULL_NET_REF;
 
-    // obtain buffer
-    process_buffs * buffs = pb_utility_get();
-    buffer * buff = buffs->analysis_buff;
+  // obtain buffer
+  process_buffs * buffs = pb_utility_get();
+  buffer * buff = buffs->analysis_buff;
 
-    // this callback can be called before the jvm is started
-    // the loaded classes are mostly java.lang.*
-    // classes will be (hopefully) loaded by the same class loader
-    // this phase is indicated by NULL_NET_REF in the class loader id and it
-    // is then handled by server
-    if (jvm_started) {
+  // this callback can be called before the jvm is started
+  // the loaded classes are mostly java.lang.*
+  // classes will be (hopefully) loaded by the same class loader
+  // this phase is indicated by NULL_NET_REF in the class loader id and it
+  // is then handled by server
+  if (jvm_started) {
+    // tag the class loader - with lock
+    enter_critical_section(jvmti_env, tagging_lock);
+    {
       loader_id = get_net_reference(jni_env, jvmti_env, buffs->command_buff,
           loader);
     }
-
-    messager_newclass_header(buff, name, loader_id, class_data_len, class_data);
-    // send message
-    sender_enqueue(buffs);
+    exit_critical_section(jvmti_env, tagging_lock);
   }
-  exit_critical_section(jvmti_env, tagging_lock);
+
+  messager_newclass_header(buff, name, loader_id, class_data_len, class_data);
+  // send message
+  sender_enqueue(buffs);
 }
