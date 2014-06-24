@@ -199,6 +199,8 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
   // init blocking queues
   redispatcher_init(jvmti_env);
+  glbuffer_init(jvmti_env);
+
   pb_init();
   tagger_init(jvm, jvmti_env);
   sender_init(options);

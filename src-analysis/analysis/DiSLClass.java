@@ -18,7 +18,7 @@ public class DiSLClass {
 
     @Before (marker = BodyMarker.class, scope = "test.TaggingTest.remove")
     public static void remove (final DynamicContext dc) {
-        REDispatch.analysisStart (Local.RMV);
+        REDispatch.analysisStart (Local.RMV, (byte) 1);
         REDispatch.sendObject (dc.getMethodArgumentValue (0, Object.class));
         REDispatch.analysisEnd ();
     }

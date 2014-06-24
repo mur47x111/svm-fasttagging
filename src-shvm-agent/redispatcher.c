@@ -5,6 +5,7 @@
 #include "shared/threadlocal.h"
 
 #include "netref.h"
+#include "globalbuffer.h"
 #include "pbmanager.h"
 #include "sender.h"
 #include "tagger.h"
@@ -13,18 +14,6 @@
 
 // number of analysis requests in one message
 #define ANALYSIS_COUNT 16384
-
-// *** buffers for total ordering ***
-
-typedef struct {
-  process_buffs * pb;
-  jint analysis_count;
-  size_t analysis_count_pos;
-} to_buff_struct;
-
-#define TO_BUFFER_COUNT (TO_BUFFER_MAX_ID + 1) // +1 for buffer id 0
-
-static to_buff_struct to_buff_array[TO_BUFFER_COUNT];
 
 // first available id for new messages
 static volatile jshort avail_analysis_id = 1;
@@ -66,7 +55,6 @@ static void pack_object(JNIEnv * jni_env, buffer * buff, buffer * cmd_buff,
 
 static jvmtiEnv * jvmti_env;
 
-static jrawMonitorID to_buff_lock;
 static jrawMonitorID obj_free_lock;
 
 static jshort next_analysis_id() {
@@ -88,36 +76,12 @@ static jlong next_thread_id() {
   // mark the thread - with lock
   // TODO replace total ordering lock with private lock - perf. issue
   jlong result = -1;
-  enter_critical_section(jvmti_env, to_buff_lock);
+  enter_critical_section(jvmti_env, obj_free_lock);
   {
     result = avail_thread_id++;
   }
-  exit_critical_section(jvmti_env, to_buff_lock);
+  exit_critical_section(jvmti_env, obj_free_lock);
   return result;
-}
-
-static void correct_cmd_buff_pos(buffer * cmd_buff, size_t shift) {
-
-  size_t cmd_buff_len = buffer_filled(cmd_buff);
-  size_t read = 0;
-
-  objtag_rec ot_rec;
-
-  // go through all records and shift the buffer position
-  while (read < cmd_buff_len) {
-
-    // read ot_rec data
-    buffer_read(cmd_buff, read, &ot_rec, sizeof(ot_rec));
-
-    // shift buffer position
-    ot_rec.buff_pos += shift;
-
-    // write ot_rec data
-    buffer_fill_at_pos(cmd_buff, read, &ot_rec, sizeof(ot_rec));
-
-    // next
-    read += sizeof(ot_rec);
-  }
 }
 
 static jshort register_method(JNIEnv * jni_env, jstring analysis_method_desc,
@@ -242,85 +206,6 @@ static void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
       analysis_method_id);
 }
 
-static void analysis_end_buff(tldata * tld) {
-  // TODO lock for each buffer id
-
-  // sending of half-full buffer is done in shutdown hook and obj free hook
-
-  // write analysis to total order buffer - with lock
-  enter_critical_section(jvmti_env, to_buff_lock);
-  {
-    // pointer to the total order buffer structure
-    to_buff_struct * tobs = &(to_buff_array[tld->to_buff_id]);
-
-    // allocate new buffer
-    if (tobs->pb == NULL) {
-
-      tobs->pb = pb_normal_get(tld->id);
-
-      // set owner_id as t_buffid
-      tobs->pb->owner_id = tld->to_buff_id;
-
-      // determines, how many analysis requests are sent in one message
-      tobs->analysis_count = 0;
-
-      // create analysis message
-      tobs->analysis_count_pos = messager_analyze_header(
-          tobs->pb->analysis_buff, tld->to_buff_id);
-    }
-
-    // first correct positions in command buffer
-    // records in command buffer are positioned according to the local
-    // analysis buffer but we want the position to be valid in total ordered
-    // buffer
-    correct_cmd_buff_pos(tld->local_pb->command_buff,
-        buffer_filled(tobs->pb->analysis_buff));
-
-    // fill total order buffers
-    buffer_fill(tobs->pb->analysis_buff,
-        // NOTE: normally access the buffer using methods
-        tld->local_pb->analysis_buff->buff,
-        tld->local_pb->analysis_buff->occupied);
-
-    buffer_fill(tobs->pb->command_buff,
-        // NOTE: normally access the buffer using methods
-        tld->local_pb->command_buff->buff,
-        tld->local_pb->command_buff->occupied);
-
-    // empty local buffers
-    buffer_clean(tld->local_pb->analysis_buff);
-    buffer_clean(tld->local_pb->command_buff);
-
-    // add number of completed requests
-    ++(tobs->analysis_count);
-
-    // buffer has to be updated each time because jvm could end and buffer
-    // has to be up-to date
-    buff_put_int(tobs->pb->analysis_buff, tobs->analysis_count_pos,
-        tobs->analysis_count);
-
-    // send only when the method count is reached
-    if (tobs->analysis_count >= ANALYSIS_COUNT) {
-
-      // send buffers for object tagging
-      tagger_enqueue(tobs->pb);
-
-      // invalidate buffer pointer
-      tobs->pb = NULL;
-    }
-  }
-  exit_critical_section(jvmti_env, to_buff_lock);
-
-  // reset analysis and command buffers for normal buffering
-  // set to NULL, because we've send the buffers at the beginning of
-  // global buffer buffering
-  tld->analysis_buff = NULL;
-  tld->command_buff = NULL;
-
-  // invalidate buffer id
-  tld->to_buff_id = INVALID_BUFF_ID;
-}
-
 static void analysis_end_switch(tldata * tld) {
   // update the length of the marshalled arguments
   jshort args_length = buffer_filled(tld->analysis_buff) - tld->args_length_pos
@@ -329,7 +214,19 @@ static void analysis_end_switch(tldata * tld) {
 
   // this method is also called for end of analysis for totally ordered API
   if (tld->to_buff_id != INVALID_BUFF_ID) {
-    analysis_end_buff(tld);
+    // TODO lock for each buffer id
+    // sending of half-full buffer is done in shutdown hook and obj free hook
+    // write analysis to total order buffer - with lock
+    glbuffer_copy_from_tlbuffer();
+
+    // reset analysis and command buffers for normal buffering
+    // set to NULL, because we've send the buffers at the beginning of
+    // global buffer buffering
+    tld->analysis_buff = NULL;
+    tld->command_buff = NULL;
+
+    // invalidate buffer id
+    tld->to_buff_id = INVALID_BUFF_ID;
   } else {
     analysis_end(tld);
   }
@@ -432,18 +329,8 @@ static JNINativeMethod redispatchMethods[] = {
 void redispatcher_init(jvmtiEnv *env) {
   jvmti_env = env;
 
-  jvmtiError error;
-
-  error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "buffids", &to_buff_lock);
+  jvmtiError error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "obj free", &obj_free_lock);
   check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
-
-  error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "obj free", &obj_free_lock);
-  check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
-
-  // initialize total ordering buff array
-  for (int i = 0; i < TO_BUFFER_COUNT; ++i) {
-    to_buff_array[i].pb = NULL;
-  }
 }
 
 void redispatcher_register_natives(JNIEnv * jni_env, jclass klass) {
@@ -518,23 +405,6 @@ static void send_thread_buffers(tldata * tld) {
   tld->pb = NULL;
 }
 
-static void send_all_to_buffers() {
-  // send all total ordering buffers - with lock
-  enter_critical_section(jvmti_env, to_buff_lock);
-  {
-    for (int i = 0; i < TO_BUFFER_COUNT; ++i) {
-      // send all buffers for occupied ids
-      if (to_buff_array[i].pb != NULL) {
-        // send buffers for object tagging
-        tagger_enqueue(to_buff_array[i].pb);
-        // invalidate buffer pointer
-        to_buff_array[i].pb = NULL;
-      }
-    }
-  }
-  exit_critical_section(jvmti_env, to_buff_lock);
-}
-
 static void send_obj_free_buffer() {
   // send object free buffer - with lock
   enter_critical_section(jvmti_env, obj_free_lock);
@@ -572,8 +442,8 @@ void redispatcher_thread_end() {
 
 void redispatcher_vm_death() {
   tldata * tld = tld_get();
-  // send all buffers for total order
-  send_all_to_buffers();
+
+  glbuffer_sendall();
 
   // send buffers of shutdown thread
   send_thread_buffers(tld);
