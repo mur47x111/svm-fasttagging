@@ -34,9 +34,6 @@ static JavaVM * java_vm;
 // number of analysis requests in one message
 #define ANALYSIS_COUNT 16384
 
-// list of all allocated bq buffers
-process_buffs pb_list[BQ_BUFFERS + BQ_UTILITY];
-
 // *** buffers for total ordering ***
 
 typedef struct {
@@ -45,7 +42,6 @@ typedef struct {
   size_t analysis_count_pos;
 } to_buff_struct;
 
-#define TO_BUFFER_MAX_ID 127 // byte is the holding type
 #define TO_BUFFER_COUNT (TO_BUFFER_MAX_ID + 1) // +1 for buffer id 0
 
 static jrawMonitorID to_buff_lock;
@@ -64,8 +60,6 @@ static jrawMonitorID obj_free_lock;
 
 // first available id for new messages
 static volatile jshort avail_analysis_id = 1;
-
-#define STARTING_THREAD_ID (TO_BUFFER_MAX_ID + 1)
 
 // initial ids are reserved for total ordering buffers
 static volatile jlong avail_thread_id = STARTING_THREAD_ID;
@@ -210,7 +204,7 @@ static size_t create_analysis_request_header(buffer * buff,
 }
 
 void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
-    jbyte ordering_id, struct tldata * tld) {
+    jbyte ordering_id, tldata * tld) {
 #ifdef DEBUGANL
   printf("Analysis (buffer) start enter (thread %ld)\n", tld_get()->id);
 #endif
@@ -238,7 +232,7 @@ void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
     }
 
     // get buffers
-    tld->local_pb = pb_get(tld->id);
+    tld->local_pb = pb_normal_get(tld->id);
   }
 
   // set local buffers for this buffering
@@ -276,7 +270,7 @@ static size_t create_analysis_msg(buffer * buff, jlong id) {
 }
 
 static void analysis_start(JNIEnv * jni_env, jshort analysis_method_id,
-    struct tldata * tld) {
+    tldata * tld) {
 #ifdef DEBUGANL
   printf("Analysis start enter (thread %ld)\n", tld_get()->id);
 #endif
@@ -289,7 +283,7 @@ static void analysis_start(JNIEnv * jni_env, jshort analysis_method_id,
     }
 
     // get buffers
-    tld->pb = pb_get(tld->id);
+    tld->pb = pb_normal_get(tld->id);
     tld->analysis_buff = tld->pb->analysis_buff;
     tld->command_buff = tld->pb->command_buff;
 
@@ -334,7 +328,7 @@ static void correct_cmd_buff_pos(buffer * cmd_buff, size_t shift) {
   }
 }
 
-static void analysis_end_buff(struct tldata * tld) {
+static void analysis_end_buff(tldata * tld) {
 #ifdef DEBUGANL
   printf("Analysis (buffer) end enter (thread %ld)\n", tld_get()->id);
 #endif
@@ -352,7 +346,7 @@ static void analysis_end_buff(struct tldata * tld) {
     // allocate new buffer
     if (tobs->pb == NULL) {
 
-      tobs->pb = pb_get(tld->id);
+      tobs->pb = pb_normal_get(tld->id);
 
       // set owner_id as t_buffid
       tobs->pb->owner_id = tld->to_buff_id;
@@ -421,7 +415,7 @@ static void analysis_end_buff(struct tldata * tld) {
 #endif
 }
 
-static void analysis_end(struct tldata * tld) {
+static void analysis_end(tldata * tld) {
   // update the length of the marshalled arguments
   jshort args_length = buffer_filled(tld->analysis_buff) - tld->args_length_pos
       - sizeof(jshort);
@@ -542,7 +536,7 @@ JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendDouble(
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObject(
     JNIEnv * jni_env, jclass this_class, jobject to_send) {
 
-  struct tldata * tld = tld_get();
+  tldata * tld = tld_get();
   pack_object(jni_env, tld->analysis_buff, tld->command_buff, to_send,
   OT_OBJECT);
 }
@@ -550,38 +544,40 @@ JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObject(
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData(
     JNIEnv * jni_env, jclass this_class, jobject to_send) {
 
-  struct tldata * tld = tld_get();
+  tldata * tld = tld_get();
   pack_object(jni_env, tld->analysis_buff, tld->command_buff, to_send,
   OT_DATA_OBJECT);
 }
 
-static JNINativeMethod redispatchMethods[] =
-    { { "registerMethod", "(Ljava/lang/String;)S",
-        (void *) &Java_ch_usi_dag_dislre_REDispatch_registerMethod }, {
-        "analysisStart", "(S)V",
-        (void *) &Java_ch_usi_dag_dislre_REDispatch_analysisStart__S }, {
-        "analysisStart", "(SB)V",
-        (void *) &Java_ch_usi_dag_dislre_REDispatch_analysisStart__SB }, {
-        "analysisEnd", "()V",
-        (void *) &Java_ch_usi_dag_dislre_REDispatch_analysisEnd }, {
-        "sendBoolean", "(Z)V",
-        (void *) &Java_ch_usi_dag_dislre_REDispatch_sendBoolean }, { "sendByte",
-        "(B)V", (void *) &Java_ch_usi_dag_dislre_REDispatch_sendByte },
-        { "sendChar", "(C)V",
-            (void *) &Java_ch_usi_dag_dislre_REDispatch_sendChar }, {
-            "sendShort", "(S)V",
-            (void *) &Java_ch_usi_dag_dislre_REDispatch_sendShort }, {
-            "sendInt", "(I)V",
-            (void *) &Java_ch_usi_dag_dislre_REDispatch_sendInt }, { "sendLong",
-            "(J)V", (void *) &Java_ch_usi_dag_dislre_REDispatch_sendLong }, {
-            "sendFloat", "(F)V",
-            (void *) &Java_ch_usi_dag_dislre_REDispatch_sendFloat }, {
-            "sendDouble", "(D)V",
-            (void *) &Java_ch_usi_dag_dislre_REDispatch_sendDouble }, {
-            "sendObject", "(Ljava/lang/Object;)V",
-            (void *) &Java_ch_usi_dag_dislre_REDispatch_sendObject }, {
-            "sendObjectPlusData", "(Ljava/lang/Object;)V",
-            (void *) &Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData }, };
+static JNINativeMethod redispatchMethods[] = {
+    {"registerMethod",     "(Ljava/lang/String;)S", (void *)&Java_ch_usi_dag_dislre_REDispatch_registerMethod},
+    {"analysisStart",      "(S)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_analysisStart__S},
+    {"analysisStart",      "(SB)V",                 (void *)&Java_ch_usi_dag_dislre_REDispatch_analysisStart__SB},
+    {"analysisEnd",        "()V",                   (void *)&Java_ch_usi_dag_dislre_REDispatch_analysisEnd},
+    {"sendBoolean",        "(Z)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendBoolean},
+    {"sendByte",           "(B)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendByte},
+    {"sendChar",           "(C)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendChar},
+    {"sendShort",          "(S)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendShort},
+    {"sendInt",            "(I)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendInt},
+    {"sendLong",           "(J)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendLong},
+    {"sendFloat",          "(F)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendFloat},
+    {"sendDouble",         "(D)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendDouble},
+    {"sendObject",         "(Ljava/lang/Object;)V", (void *)&Java_ch_usi_dag_dislre_REDispatch_sendObject},
+    {"sendObjectPlusData", "(Ljava/lang/Object;)V", (void *)&Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData},
+};
+
+// ******************* START callback *******************
+
+void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
+  tagger_jvmstart();
+}
+
+// ******************* INIT callback *******************
+
+void JNICALL jvmti_callback_vm_init_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env,
+    jthread thread) {
+  tagger_connect();
+}
 
 // ******************* CLASS LOAD callback *******************
 
@@ -698,19 +694,6 @@ void JNICALL jvmti_callback_object_free_hook(jvmtiEnv *jvmti_env, jlong tag) {
   exit_critical_section(jvmti_env, obj_free_lock);
 }
 
-// ******************* START callback *******************
-
-void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
-  tagger_jvmstart();
-}
-
-// ******************* INIT callback *******************
-
-void JNICALL jvmti_callback_vm_init_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env,
-    jthread thread) {
-  tagger_connect();
-}
-
 // ******************* SHUTDOWN callback *******************
 
 static void send_all_to_buffers() {
@@ -735,18 +718,14 @@ static void send_all_to_buffers() {
   exit_critical_section(jvmti_env, to_buff_lock);
 }
 
-static void send_thread_buffers(struct tldata * tld) {
-
+static void send_thread_buffers(tldata * tld) {
   // thread is marked -> worked with buffers
   jlong thread_id = tld->id;
   if (thread_id != INVALID_THREAD_ID) {
+    process_buffs *pb = pb_get(thread_id);
 
-    int i;
-    for (i = 0; i < BQ_BUFFERS; ++i) {
-      // if buffer is owned by tagged thread, send it
-      if (pb_list[i].owner_id == thread_id) {
-        tagger_enqueue(&(pb_list[i]));
-      }
+    if (pb != NULL) {
+      tagger_enqueue(pb);
     }
   }
 
@@ -769,7 +748,7 @@ static void send_obj_free_buffer() {
 }
 
 void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
-  struct tldata * tld = tld_get();
+  tldata * tld = tld_get();
 
 #ifdef DEBUG
   printf("Shutting down (thread %ld)\n", tld_get()->id);
@@ -802,63 +781,7 @@ void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) 
   tagger_disconnect();
   sender_disconnect();
 
-  // NOTE: Buffers hold by other threads can be in inconsistent state.
-  // We cannot simply send them, so we at least inform the user.
-
-  // inform about all non-send buffers
-  // all buffers should be send except some daemon thread buffers
-  //  - also some class loading + thread tagging buffers can be there (with 0)
-  // Report: .
-
-  int relevant_count = 0;
-  int support_count = 0;
-  int marked_thread_count = 0;
-  int non_marked_thread_count = 0;
-
-  for (int i = 0; i < BQ_BUFFERS; ++i) {
-
-    // buffer held by thread that performed (is still doing) analysis
-    //  - probably analysis data
-    if (pb_list[i].owner_id >= STARTING_THREAD_ID) {
-      relevant_count += buffer_filled(pb_list[i].analysis_buff);
-      support_count += buffer_filled(pb_list[i].command_buff);
-      ++marked_thread_count;
-#ifdef DEBUG
-      printf("Lost buffer for id %ld\n", pb_list[i].owner_id);
-#endif
-    }
-
-    // buffer held by thread that did NOT perform analysis
-    //  - support data
-    if (pb_list[i].owner_id == INVALID_THREAD_ID) {
-      support_count += buffer_filled(pb_list[i].analysis_buff)
-          + buffer_filled(pb_list[i].command_buff);
-      ++non_marked_thread_count;
-    }
-
-    check_error(pb_list[i].owner_id == PB_OBJTAG,
-        "Unprocessed buffers left in object tagging queue");
-
-    check_error(pb_list[i].owner_id == PB_SEND,
-        "Unprocessed buffers left in sending queue");
-  }
-
-#ifdef DEBUG
-  if(relevant_count > 0 || support_count > 0) {
-    fprintf(stderr, "%s%s%d%s%d%s%s%d%s%d%s",
-        "Warning: ",
-        "Due to non-terminated (daemon) threads, ",
-        relevant_count,
-        " bytes of relevant data and ",
-        support_count,
-        " bytes of support data were lost ",
-        "(thread count - analysis: ",
-        marked_thread_count,
-        ", helper: ",
-        non_marked_thread_count,
-        ").\n");
-  }
-#endif
+  pb_free();
 
   // NOTE: If we clean up, and daemon thread will use the structures,
   // it will crash. It is then better to leave it all as is.
@@ -890,7 +813,7 @@ void JNICALL jvmti_callback_thread_end_hook(jvmtiEnv *jvmti_env,
   // send thread end message
 
   // obtain buffer
-  process_buffs * buffs = pb_get(thread_id);
+  process_buffs * buffs = pb_normal_get(thread_id);
   buffer * buff = buffs->analysis_buff;
 
   // msg id
@@ -1012,33 +935,13 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
   // init blocking queues
   pb_init();
-
-  // allocate buffers and add to the empty and utility buffer queues
-  for (int i = 0; i < BQ_BUFFERS + BQ_UTILITY; ++i) {
-    process_buffs * pb = &(pb_list[i]);
-
-    // allocate process_buffs
-    pb->analysis_buff = malloc(sizeof(buffer));
-    buffer_alloc(pb->analysis_buff);
-    pb->command_buff = malloc(sizeof(buffer));
-    buffer_alloc(pb->command_buff);
-
-    if (i < BQ_BUFFERS) {
-      // add buffer to the empty queue
-      pb_release(pb);
-    } else {
-      // add buffer to the utility queue
-      pb_utility_release(pb);
-    }
-  }
+  tagger_init(jvm, jvmti_env);
+  sender_init(options);
 
   // initialize total ordering buff array
   for (int i = 0; i < TO_BUFFER_COUNT; ++i) {
     to_buff_array[i].pb = NULL;
   }
-
-  sender_init(options);
-  tagger_init(jvm, jvmti_env);
 
   sender_connect();
 

@@ -261,7 +261,7 @@ void tagger_disconnect() {
   no_tagging_work = 1;
 
   // send empty buff to obj_tag thread -> ensures exit if waiting
-  process_buffs * buffs = pb_get(0);
+  process_buffs * buffs = pb_normal_get(0);
   tagger_enqueue(buffs);
 
   int res = pthread_join(objtag_thread, NULL);

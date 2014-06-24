@@ -54,9 +54,12 @@ typedef struct {
 } process_buffs;
 
 void pb_init();
+void pb_free();
 
 process_buffs * pb_get(jlong thread_id);
-void pb_release(process_buffs * buffs);
+
+process_buffs * pb_normal_get(jlong thread_id);
+void pb_normal_release(process_buffs * buffs);
 
 process_buffs * pb_utility_get();
 void pb_utility_release(process_buffs * buffs);
