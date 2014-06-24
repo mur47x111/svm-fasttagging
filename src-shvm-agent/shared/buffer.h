@@ -3,11 +3,19 @@
 
 #include <stdlib.h>
 
+#include <jvmti.h>
+
 typedef struct {
 	unsigned char * buff;
 	size_t occupied;
 	size_t capacity;
 } buffer;
+
+typedef struct {
+  buffer * command_buff;
+  buffer * analysis_buff;
+  jlong owner_id;
+} process_buffs;
 
 void buffer_alloc(buffer * b);
 

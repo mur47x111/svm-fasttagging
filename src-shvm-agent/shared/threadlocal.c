@@ -2,6 +2,8 @@
 
 #include "threadlocal.h"
 
+#include "../../src-disl-agent/jvmtiutil.h"
+
 // *** Thread locals ***
 
 #if defined (__APPLE__) && defined (__MACH__)

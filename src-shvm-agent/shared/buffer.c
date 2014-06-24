@@ -2,7 +2,7 @@
 
 #include "buffer.h"
 
-#include "../src-disl-agent/jvmtiutil.h"
+#include "../../src-disl-agent/jvmtiutil.h"
 
 // initial buffer size
 #define INIT_BUFF_SIZE 512

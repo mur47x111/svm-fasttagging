@@ -1,4 +1,5 @@
 #include <string.h>
+
 #include "messagetype.h"
 
 #include "buffpack.h"

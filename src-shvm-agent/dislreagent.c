@@ -13,21 +13,14 @@
 
 #include "dislreagent.h"
 
-#include "messagetype.h"
-#include "buffer.h"
-#include "buffpack.h"
-#include "blockingqueue.h"
-#include "netref.h"
-#include "threadlocal.h"
-#include "redispatcher.h"
+#include "shared/threadlocal.h"
 
-#include "processbuffs.h"
+#include "pbmanager.h"
+#include "redispatcher.h"
 #include "tagger.h"
 #include "sender.h"
 
 #include "../src-disl-agent/jvmtiutil.h"
-
-// ******************* CLASS LOAD callback *******************
 
 void JNICALL jvmti_callback_class_file_load_hook(jvmtiEnv *jvmti_env,
     JNIEnv* jni_env, jclass class_being_redefined, jobject loader,
@@ -36,8 +29,6 @@ void JNICALL jvmti_callback_class_file_load_hook(jvmtiEnv *jvmti_env,
     unsigned char** new_class_data) {
   tagger_newclass(jni_env, jvmti_env, loader, name, class_data_len, class_data);
 }
-
-// ******************* CLASS prepare callback *******************
 
 // registers all native methods so they can be used during VM init phase
 void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
@@ -52,8 +43,9 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
   }
 
   char * class_sig;
-  jvmtiError error = (*jvmti_env)->GetClassSignature(jvmti_env, klass, &class_sig,
-  NULL);
+  jvmtiError error = (*jvmti_env)->GetClassSignature(jvmti_env, klass,
+      &class_sig,
+      NULL);
   check_jvmti_error(jvmti_env, error, "Cannot get class signature");
 
   if (strcmp(class_sig, "Lch/usi/dag/dislre/REDispatch;") == 0) {
@@ -66,33 +58,23 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
   check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
 }
 
-// ******************* START callback *******************
-
 void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
   tagger_jvmstart();
 }
-
-// ******************* INIT callback *******************
 
 void JNICALL jvmti_callback_vm_init_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env,
     jthread thread) {
   tagger_connect();
 }
 
-// ******************* OBJECT FREE callback *******************
-
 void JNICALL jvmti_callback_object_free_hook(jvmtiEnv *jvmti_env, jlong tag) {
   redispatcher_object_free(tag);
 }
-
-// ******************* THREAD END callback *******************
 
 void JNICALL jvmti_callback_thread_end_hook(jvmtiEnv *jvmti_env,
     JNIEnv* jni_env, jthread thread) {
   redispatcher_thread_end();
 }
-
-// ******************* SHUTDOWN callback *******************
 
 void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
   redispatcher_vm_death();

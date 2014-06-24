@@ -1,12 +1,12 @@
-#ifndef _PROCESSBUFFS_H
-#define	_PROCESSBUFFS_H
+#ifndef _PBMANAGER_H
+#define	_PBMANAGER_H
 
 #include <stdlib.h>
 #include <string.h>
 
 #include <jvmti.h>
 
-#include "buffer.h"
+#include "shared/buffer.h"
 
 // queues contain process_buffs structure
 
@@ -47,12 +47,6 @@
 // == PB_UTILITY - means that this is special utility buffer
 #define PB_UTILITY -1000
 
-typedef struct {
-  buffer * command_buff;
-  buffer * analysis_buff;
-  jlong owner_id;
-} process_buffs;
-
 void pb_init();
 void pb_free();
 
@@ -64,4 +58,4 @@ void pb_normal_release(process_buffs * buffs);
 process_buffs * pb_utility_get();
 void pb_utility_release(process_buffs * buffs);
 
-#endif	/* _PROCESSBUFFS_H */
+#endif	/* _PBMANAGER_H */

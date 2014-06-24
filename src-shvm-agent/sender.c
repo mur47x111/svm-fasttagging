@@ -5,12 +5,13 @@
 #include <unistd.h>
 
 #include "sender.h"
-#include "../src-disl-agent/jvmtiutil.h"
-#include "processbuffs.h"
 
-#include "buffpack.h"
-#include "blockingqueue.h"
-#include "messagetype.h"
+#include "shared/blockingqueue.h"
+#include "shared/messagetype.h"
+
+#include "pbmanager.h"
+
+#include "../src-disl-agent/jvmtiutil.h"
 
 // ******************* Communication *******************
 

@@ -1,9 +1,9 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "blockingqueue.h"
-#include "../src-disl-agent/jvmtiutil.h"
+
+#include "../../src-disl-agent/jvmtiutil.h"
 
 // ** Monitor helper functions **
 

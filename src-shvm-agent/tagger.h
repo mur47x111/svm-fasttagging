@@ -4,7 +4,7 @@
 #include <jni.h>
 #include <jvmti.h>
 
-#include "processbuffs.h"
+#include "shared/buffer.h"
 
 #define OT_OBJECT 1
 #define OT_DATA_OBJECT 2

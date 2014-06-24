@@ -1,7 +1,7 @@
 #ifndef _SENDER_H_
 #define _SENDER_H_
 
-#include "processbuffs.h"
+#include "shared/buffer.h"
 
 void sender_init(char *options);
 void sender_connect();

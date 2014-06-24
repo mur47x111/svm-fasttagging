@@ -1,7 +1,7 @@
-#include "processbuffs.h"
-#include "blockingqueue.h"
-#include "netref.h"
-#include "threadlocal.h"
+#include "pbmanager.h"
+
+#include "shared/blockingqueue.h"
+#include "shared/threadlocal.h"
 
 #include "../src-disl-agent/jvmtiutil.h"
 

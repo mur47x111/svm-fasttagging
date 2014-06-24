@@ -4,7 +4,7 @@
 #include <jvmti.h>
 #include <jni.h>
 
-#include "buffer.h"
+#include "shared/buffer.h"
 
 #define NULL_NET_REF 0
 

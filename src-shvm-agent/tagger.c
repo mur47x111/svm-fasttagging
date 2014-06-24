@@ -1,14 +1,14 @@
 #include <stdlib.h>
 #include <pthread.h>
 
-#include "netref.h"
-
-#include "blockingqueue.h"
-#include "buffpack.h"
-#include "processbuffs.h"
-#include "messagetype.h"
-
 #include "tagger.h"
+
+#include "shared/blockingqueue.h"
+#include "shared/buffpack.h"
+#include "shared/messagetype.h"
+
+#include "netref.h"
+#include "pbmanager.h"
 #include "sender.h"
 
 #include "../src-disl-agent/jvmtiutil.h"

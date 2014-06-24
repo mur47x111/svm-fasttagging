@@ -1,13 +1,15 @@
 #include "redispatcher.h"
 
-#include "messagetype.h"
-#include "buffpack.h"
-#include "processbuffs.h"
-#include "threadlocal.h"
-#include "netref.h"
+#include "shared/buffpack.h"
+#include "shared/messagetype.h"
+#include "shared/threadlocal.h"
 
-#include "tagger.h"
+#include "netref.h"
+#include "pbmanager.h"
 #include "sender.h"
+#include "tagger.h"
+
+#include "../src-disl-agent/jvmtiutil.h"
 
 // number of analysis requests in one message
 #define ANALYSIS_COUNT 16384
