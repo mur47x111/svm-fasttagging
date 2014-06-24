@@ -8,8 +8,6 @@
 
 #include "shared/buffer.h"
 
-// queues contain process_buffs structure
-
 // Utility queue (buffer) is specifically reserved for sending different
 // messages then analysis messages. The rationale behind utility buffers is that
 // at least one utility buffer is available or will be available in the near

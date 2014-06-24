@@ -78,6 +78,31 @@ void JNICALL jvmti_callback_thread_end_hook(jvmtiEnv *jvmti_env,
 
 void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
   redispatcher_vm_death();
+  // TODO ! suspend all *other* marked threads (they should no be in native code)
+  // and send their buffers
+  // you can stop them one by one using linux pid
+  //   - pid id used instead of avail_thread_id as a thread id
+  // resume threads after the sending thread is finished
+
+  //jthread thread_obj;
+  //jvmtiError error = (*jvmti_env)->GetCurrentThread(jvmti_env, &thread_obj);
+  //check_jvmti_error(jvmti_env, error, "Cannot get object of current thread.");
+  //GetAllThreads
+  //SuspendThread
+  //ResumeThread
+  //GetThreadState
+
+  // shutdown - first tagging then sending thread
+  tagger_disconnect();
+  sender_disconnect();
+
+  pb_free();
+
+  // NOTE: If we clean up, and daemon thread will use the structures,
+  // it will crash. It is then better to leave it all as is.
+  // dealloc buffers
+  // cleanup blocking queues
+  // cleanup java locks
 }
 
 // ******************* JVMTI entry method *******************
