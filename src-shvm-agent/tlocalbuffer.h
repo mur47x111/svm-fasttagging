@@ -5,7 +5,9 @@
 
 #include "shared/buffer.h"
 
-void tl_init(jvmtiEnv * env);
+#include "globalbuffer.h"
+
+#define STARTING_THREAD_ID (TO_BUFFER_MAX_ID + 1)
 
 void tl_insert_analysis_item(jshort analysis_method_id);
 void tl_insert_analysis_item_ordering(jshort analysis_method_id,

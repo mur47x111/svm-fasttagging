@@ -3,6 +3,8 @@
 #include "shared/blockingqueue.h"
 #include "shared/threadlocal.h"
 
+#include "tlocalbuffer.h"
+
 #include "../src-disl-agent/jvmtiutil.h"
 
 // queue with empty buffers

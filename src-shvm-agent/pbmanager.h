@@ -56,7 +56,4 @@ void pb_normal_release(process_buffs * buffs);
 process_buffs * pb_utility_get();
 void pb_utility_release(process_buffs * buffs);
 
-#define TO_BUFFER_MAX_ID 127 // byte is the holding type
-#define STARTING_THREAD_ID (TO_BUFFER_MAX_ID + 1)
-
 #endif	/* _PBMANAGER_H */

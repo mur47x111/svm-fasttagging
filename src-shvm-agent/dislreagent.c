@@ -201,9 +201,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   check_jvmti_error(jvmti_env, error, "Cannot set thread end hook");
 
   // init blocking queues
-  redispatcher_init(jvmti_env);
   glbuffer_init(jvmti_env);
-  tl_init(jvmti_env);
 
   fh_init(jvmti_env);
 

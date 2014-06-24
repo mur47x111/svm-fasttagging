@@ -10,33 +10,11 @@
 
 #include "../src-disl-agent/jvmtiutil.h"
 
-// number of analysis requests in one message
-#define ANALYSIS_COUNT 16384
-
 // initial ids are reserved for total ordering buffers
 static volatile jlong avail_thread_id = STARTING_THREAD_ID;
 
-static jvmtiEnv * jvmti_env;
-static jrawMonitorID threadID_lock;
-
-static jlong next_thread_id() {
-  // mark the thread - with lock
-  // TODO replace total ordering lock with private lock - perf. issue
-  jlong result = -1;
-  enter_critical_section(jvmti_env, threadID_lock);
-  {
-    result = avail_thread_id++;
-  }
-  exit_critical_section(jvmti_env, threadID_lock);
-  return result;
-}
-
-void tl_init(jvmtiEnv * env) {
-  jvmti_env = env;
-
-  jvmtiError error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "thread id",
-      &threadID_lock);
-  check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
+static inline jlong next_thread_id() {
+  return __sync_fetch_and_add(&avail_thread_id, 1);
 }
 
 void tl_insert_analysis_item(jshort analysis_method_id) {

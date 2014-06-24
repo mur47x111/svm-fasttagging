@@ -9,11 +9,6 @@
 
 #include "../src-disl-agent/jvmtiutil.h"
 
-// number of analysis requests in one message
-#define ANALYSIS_COUNT 16384
-
-#define TO_BUFFER_COUNT (TO_BUFFER_MAX_ID + 1) // +1 for buffer id 0
-
 static jrawMonitorID to_buff_lock;
 static to_buff_struct to_buff_array[TO_BUFFER_COUNT];
 

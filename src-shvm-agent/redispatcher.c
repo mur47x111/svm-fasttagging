@@ -46,26 +46,11 @@ static void pack_object(JNIEnv * jni_env, buffer * buff, buffer * cmd_buff,
 
 // ******************* analysis helper methods *******************
 
-static jvmtiEnv * jvmti_env;
-
 // first available id for new messages
 static volatile jshort avail_analysis_id = 1;
 
-static jrawMonitorID analysisID_lock;
-
-static jshort next_analysis_id() {
-  // get id for this method string
-  // this could use different lock then tagging but it should not be a problem
-  // and it will be used rarely - bit unoptimized
-
-  jshort result = -1;
-  enter_critical_section(jvmti_env, analysisID_lock);
-  {
-    result = avail_analysis_id++;
-  }
-  exit_critical_section(jvmti_env, analysisID_lock);
-
-  return result;
+static inline jlong next_analysis_id() {
+  return __sync_fetch_and_add(&avail_analysis_id, 1);
 }
 
 static jshort register_method(JNIEnv * jni_env, jstring analysis_method_desc,
@@ -191,14 +176,6 @@ static JNINativeMethod redispatchMethods[] = {
     {"sendObject",         "(Ljava/lang/Object;)V", (void *)&Java_ch_usi_dag_dislre_REDispatch_sendObject},
     {"sendObjectPlusData", "(Ljava/lang/Object;)V", (void *)&Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData},
 };
-
-void redispatcher_init(jvmtiEnv *env) {
-  jvmti_env = env;
-
-  jvmtiError error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "obj free",
-      &analysisID_lock);
-  check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
-}
 
 void redispatcher_register_natives(JNIEnv * jni_env, jclass klass) {
   (*jni_env)->RegisterNatives(jni_env, klass, redispatchMethods,
