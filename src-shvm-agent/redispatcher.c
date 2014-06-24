@@ -5,12 +5,10 @@
 #include "shared/threadlocal.h"
 
 #include "objecttag.h"
-#include "globalbuffer.h"
 #include "tlocalbuffer.h"
 #include "pbmanager.h"
 #include "sender.h"
 #include "tagger.h"
-#include "freehandler.h"
 
 #include "../src-disl-agent/jvmtiutil.h"
 
@@ -41,7 +39,7 @@ static void pack_object(JNIEnv * jni_env, buffer * buff, buffer * cmd_buff,
   }
 
   // pack null net reference
-  pack_long(buff, NULL_NET_REF);
+  pack_long(buff, NULL_TAG);
 }
 
 // ******************* analysis helper methods *******************
@@ -180,22 +178,4 @@ static JNINativeMethod redispatchMethods[] = {
 void redispatcher_register_natives(JNIEnv * jni_env, jclass klass) {
   (*jni_env)->RegisterNatives(jni_env, klass, redispatchMethods,
       sizeof(redispatchMethods) / sizeof(redispatchMethods[0]));
-}
-
-void redispatcher_object_free(jlong tag) {
-  fh_object_free(tag);
-}
-
-void redispatcher_thread_end() {
-  tl_thread_end();
-}
-
-void redispatcher_vm_death() {
-  glbuffer_sendall();
-
-  // send buffers of shutdown thread
-  tl_send_buffer();
-
-  // send object free buffer
-  fh_send_buffer();
 }

@@ -8,6 +8,7 @@
 
 #include "shared/blockingqueue.h"
 #include "shared/messagetype.h"
+#include "shared/threadlocal.h"
 
 #include "pbmanager.h"
 
@@ -90,7 +91,7 @@ static int open_connection() {
 }
 
 static void close_connection(int sockfd) {
-  process_buffs * pb = pb_normal_get(0);
+  process_buffs * pb = pb_normal_get(tld_get()->id);
 
   messager_close_header(pb->command_buff);
   send_data(sockfd, pb->command_buff);
@@ -101,7 +102,6 @@ static void close_connection(int sockfd) {
 
 // ******************* Sender routines *******************
 
-static pthread_t sender;
 static blocking_queue send_q;
 
 static volatile int no_sending_work = 0;
@@ -143,12 +143,12 @@ void sender_init(char *options) {
   bq_create(&send_q, BQ_BUFFERS + BQ_UTILITY, sizeof(process_buffs *));
 }
 
-void sender_connect() {
-  int res = pthread_create(&sender, NULL, sender_loop, NULL);
+void sender_connect(pthread_t *sender_thread) {
+  int res = pthread_create(sender_thread, NULL, sender_loop, NULL);
   check_error(res != 0, "Cannot create sending thread");
 }
 
-void sender_disconnect() {
+void sender_disconnect(pthread_t *sender_thread, int size) {
   no_sending_work = 1;
 
   // TODO if multiple sending threads, multiple empty buffers have to be send
@@ -156,12 +156,16 @@ void sender_disconnect() {
   // sending queue - has to be supported by the queue itself
 
   // send empty buff to sending thread -> ensures exit if waiting
-  process_buffs *buffs = pb_normal_get(0);
-  sender_enqueue(buffs);
+  for (int i = 0; i < size; i++) {
+    process_buffs *buffs = pb_normal_get(tld_get()->id);
+    sender_enqueue(buffs);
+  }
 
   // wait for thread end
-  int res = pthread_join(sender, NULL);
-  check_error(res != 0, "Cannot join sending thread.");
+  for (int i = 0; i < size; i++) {
+    int res = pthread_join(sender_thread[i], NULL);
+    check_error(res != 0, "Cannot join sending thread.");
+  }
 }
 
 void sender_enqueue(process_buffs * pb) {

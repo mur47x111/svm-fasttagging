@@ -6,7 +6,7 @@
 
 #include "shared/buffer.h"
 
-#define NULL_NET_REF 0
+#define NULL_TAG 0
 
 // ******************* Net reference routines *******************
 

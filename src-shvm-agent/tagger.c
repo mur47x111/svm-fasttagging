@@ -6,6 +6,7 @@
 #include "shared/blockingqueue.h"
 #include "shared/buffpack.h"
 #include "shared/messagetype.h"
+#include "shared/threadlocal.h"
 
 #include "objecttag.h"
 #include "pbmanager.h"
@@ -13,19 +14,15 @@
 
 #include "../src-disl-agent/jvmtiutil.h"
 
-static jclass THREAD_CLASS = NULL;
-static jclass STRING_CLASS = NULL;
 
 static JavaVM * java_vm;
 static jvmtiEnv * jvmti_env;
-
-static volatile int no_tagging_work = 0;
-
-static int jvm_started = 0;
-
 static jrawMonitorID tagging_lock;
 
-static pthread_t objtag_thread;
+static volatile jclass THREAD_CLASS = NULL;
+static volatile jclass STRING_CLASS = NULL;
+static volatile int no_tagging_work = 0;
+static blocking_queue objtag_q;
 
 // ******************* Object tagging thread *******************
 
@@ -156,8 +153,6 @@ static void ot_relese_global_ref(JNIEnv * jni_env, buffer * cmd_buff) {
   }
 }
 
-static blocking_queue objtag_q;
-
 static void * tagger_loop(void * obj) {
 
   // attach thread to jvm
@@ -172,11 +167,15 @@ static void * tagger_loop(void * obj) {
 
   // retrieve java types
 
-  STRING_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/String");
-  check_error(STRING_CLASS == NULL, "String class not found");
+  if (STRING_CLASS == NULL) {
+    STRING_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/String");
+    check_error(STRING_CLASS == NULL, "String class not found");
+  }
 
-  THREAD_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/Thread");
-  check_error(STRING_CLASS == NULL, "Thread class not found");
+  if (THREAD_CLASS == NULL) {
+    THREAD_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/Thread");
+    check_error(STRING_CLASS == NULL, "Thread class not found");
+  }
 
   // exit when the jvm is terminated and there are no msg to process
   while (!(no_tagging_work && bq_length(&objtag_q) == 0)) {
@@ -230,20 +229,24 @@ void tagger_init(JavaVM * jvm, jvmtiEnv * env) {
   bq_create(&objtag_q, BQ_BUFFERS, sizeof(process_buffs *));
 }
 
-void tagger_connect() {
-  int res = pthread_create(&objtag_thread, NULL, tagger_loop, NULL);
+void tagger_connect(pthread_t *objtag_thread) {
+  int res = pthread_create(objtag_thread, NULL, tagger_loop, NULL);
   check_error(res != 0, "Cannot create tagging thread");
 }
 
-void tagger_disconnect() {
+void tagger_disconnect(pthread_t *objtag_thread, int size) {
   no_tagging_work = 1;
 
   // send empty buff to obj_tag thread -> ensures exit if waiting
-  process_buffs * buffs = pb_normal_get(0);
-  tagger_enqueue(buffs);
+  for (int i = 0; i < size; i++) {
+    process_buffs * buffs = pb_normal_get(tld_get()->id);
+    tagger_enqueue(buffs);
+  }
 
-  int res = pthread_join(objtag_thread, NULL);
-  check_error(res != 0, "Cannot join tagging thread.");
+  for (int i = 0; i < size; i++) {
+    int res = pthread_join(objtag_thread[i], NULL);
+    check_error(res != 0, "Cannot join tagging thread.");
+  }
 }
 
 void tagger_enqueue(process_buffs * buffs) {
@@ -251,14 +254,11 @@ void tagger_enqueue(process_buffs * buffs) {
   bq_push(&objtag_q, &buffs);
 }
 
-void tagger_jvmstart() {
-  jvm_started = 1;
-}
-
 void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
-    const char* name, jint class_data_len, const unsigned char* class_data) {
+    const char* name, jint class_data_len, const unsigned char* class_data,
+    int jvm_started) {
   // retrieve class loader net ref
-  jlong loader_id = NULL_NET_REF;
+  jlong loader_id = NULL_TAG;
 
   // obtain buffer
   process_buffs * buffs = pb_utility_get();
@@ -267,7 +267,7 @@ void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
   // this callback can be called before the jvm is started
   // the loaded classes are mostly java.lang.*
   // classes will be (hopefully) loaded by the same class loader
-  // this phase is indicated by NULL_NET_REF in the class loader id and it
+  // this phase is indicated by NULL_TAG in the class loader id and it
   // is then handled by server
   if (jvm_started) {
     // tag the class loader - with lock

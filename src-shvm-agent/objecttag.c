@@ -14,6 +14,14 @@ static volatile jlong avail_object_id = 1;
 // first available class id
 static volatile jint avail_class_id = 1;
 
+static inline jlong next_object_id() {
+  return __sync_fetch_and_add(&avail_object_id, 1);
+}
+
+static inline jlong next_class_id() {
+  return __sync_fetch_and_add(&avail_class_id, 1);
+}
+
 // ******************* Net reference get/set routines *******************
 
 // should be in sync with NetReference on the server
@@ -178,13 +186,7 @@ static jlong _set_net_reference_for_class(JNIEnv * jni_env,
 
 	// assign new net reference - set spec to 1 (binding send over network)
 	jlong net_ref = _set_net_reference(jvmti_env, klass,
-			avail_object_id, avail_class_id, 1, 1);
-
-	// increment object id counter
-	++avail_object_id;
-
-	// increment class id counter
-	++avail_class_id;
+	    next_object_id(), next_class_id(), 1, 1);
 
 	// *** pack class info into buffer ***
 
@@ -263,10 +265,7 @@ static jlong _set_net_reference_for_object(JNIEnv * jni_env,
 
 	// assign new net reference
 	jlong net_ref =
-			_set_net_reference(jvmti_env, obj, avail_object_id, class_id, 0, 0);
-
-	// increment object id counter
-	++avail_object_id;
+			_set_net_reference(jvmti_env, obj, next_object_id(), class_id, 0, 0);
 
 	return net_ref;
 }

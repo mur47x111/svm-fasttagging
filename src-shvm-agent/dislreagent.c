@@ -25,12 +25,23 @@
 
 #include "../src-disl-agent/jvmtiutil.h"
 
+#define TAGGING_THREAD_NUM 2
+
+// FIXME current design does not support multiple sending threads
+#define SENDING_THREAD_NUM 1
+
+static pthread_t objtag_thread[TAGGING_THREAD_NUM];
+static pthread_t sender_thread[SENDING_THREAD_NUM];
+
+static int jvm_started = 0;
+
 void JNICALL jvmti_callback_class_file_load_hook(jvmtiEnv *jvmti_env,
     JNIEnv* jni_env, jclass class_being_redefined, jobject loader,
     const char* name, jobject protection_domain, jint class_data_len,
     const unsigned char* class_data, jint* new_class_data_len,
     unsigned char** new_class_data) {
-  tagger_newclass(jni_env, jvmti_env, loader, name, class_data_len, class_data);
+  tagger_newclass(jni_env, jvmti_env, loader, name, class_data_len, class_data,
+      jvm_started);
 }
 
 // registers all native methods so they can be used during VM init phase
@@ -62,25 +73,32 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
 }
 
 void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
-  tagger_jvmstart();
+  jvm_started = 1;
 }
 
 void JNICALL jvmti_callback_vm_init_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env,
     jthread thread) {
-  tagger_connect();
+  for (int i = 0; i < TAGGING_THREAD_NUM; i++) {
+    tagger_connect(&objtag_thread[i]);
+  }
 }
 
 void JNICALL jvmti_callback_object_free_hook(jvmtiEnv *jvmti_env, jlong tag) {
-  redispatcher_object_free(tag);
+  fh_object_free(tag);
 }
 
 void JNICALL jvmti_callback_thread_end_hook(jvmtiEnv *jvmti_env,
     JNIEnv* jni_env, jthread thread) {
-  redispatcher_thread_end();
+  tl_thread_end();
 }
 
 void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
-  redispatcher_vm_death();
+  glbuffer_sendall();
+  // send buffers of shutdown thread
+  tl_send_buffer();
+  // send object free buffer
+  fh_send_buffer();
+
   // TODO ! suspend all *other* marked threads (they should no be in native code)
   // and send their buffers
   // you can stop them one by one using linux pid
@@ -96,8 +114,8 @@ void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) 
   //GetThreadState
 
   // shutdown - first tagging then sending thread
-  tagger_disconnect();
-  sender_disconnect();
+  tagger_disconnect(objtag_thread, TAGGING_THREAD_NUM);
+  sender_disconnect(sender_thread, SENDING_THREAD_NUM);
 
   pb_free();
 
@@ -209,7 +227,9 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   tagger_init(jvm, jvmti_env);
   sender_init(options);
 
-  sender_connect();
+  for (int i = 0; i < SENDING_THREAD_NUM; i++) {
+    sender_connect(&sender_thread[i]);
+  }
 
   return 0;
 }
