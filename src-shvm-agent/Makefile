@@ -62,7 +62,7 @@ SOURCES = ../src-disl-agent/common.c ../src-disl-agent/jvmtiutil.c \
 	shared/buffer.c shared/buffpack.c shared/blockingqueue.c \
 	shared/threadlocal.c shared/messagetype.c \
 	tagger.c sender.c dislreagent.c pbmanager.c redispatcher.c netref.c \
-	globalbuffer.c freehandler.c
+	globalbuffer.c tlocalbuffer.c freehandler.c
 
 HEADERS = $(wildcard *.h)
 GENSRCS =

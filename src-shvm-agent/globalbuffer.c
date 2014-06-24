@@ -60,7 +60,7 @@ static void correct_cmd_buff_pos(buffer * cmd_buff, size_t shift) {
   }
 }
 
-void glbuffer_copy_from_tlbuffer() {
+void glbuffer_commit() {
   tldata * tld = tld_get();
 
   enter_critical_section(jvmti_env, to_buff_lock);

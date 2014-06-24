@@ -15,7 +15,7 @@ typedef struct {
 
 void glbuffer_init(jvmtiEnv *env);
 
-void glbuffer_copy_from_tlbuffer();
+void glbuffer_commit();
 
 void glbuffer_sendall();
 
