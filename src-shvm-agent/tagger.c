@@ -27,12 +27,6 @@ static jrawMonitorID tagging_lock;
 
 static pthread_t objtag_thread;
 
-static void buff_put_long(buffer * buff, size_t buff_pos, jlong to_put) {
-  // put the long at the position in network order
-  jlong nts = htobe64(to_put);
-  buffer_fill_at_pos(buff, buff_pos, &nts, sizeof(jlong));
-}
-
 // ******************* Object tagging thread *******************
 
 // TODO add cache - ??
@@ -52,13 +46,7 @@ static void ot_pack_string_data(JNIEnv * jni_env, buffer * buff,
   check_error(!size_fits, "Java string is too big for sending");
 
   // add message to the buffer
-
-  // msg id
-  pack_byte(buff, MSG_STRING_INFO);
-  // send string net reference
-  pack_long(buff, str_net_ref);
-  // send string
-  pack_string_utf8(buff, str, str_len);
+  messager_stringinfo_header(buff, str_net_ref, str, str_len);
 
   // release string
   (*jni_env)->ReleaseStringUTFChars(jni_env, to_send, str);
@@ -72,18 +60,8 @@ static void ot_pack_thread_data(JNIEnv * jni_env, buffer * buff,
   check_error(error != JVMTI_ERROR_NONE, "Cannot get tread info");
 
   // pack thread info message
-
-  // msg id
-  pack_byte(buff, MSG_THREAD_INFO);
-
-  // thread object id
-  pack_long(buff, thr_net_ref);
-
-  // thread name
-  pack_string_utf8(buff, info.name, strlen(info.name));
-
-  // is daemon thread
-  pack_boolean(buff, info.is_daemon);
+  messager_threadinfo_header(buff, thr_net_ref, info.name, strlen(info.name),
+      info.is_daemon);
 }
 
 static void update_send_status(jobject to_send, jlong * net_ref) {
@@ -299,17 +277,7 @@ void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
           loader);
     }
 
-    // msg id
-    pack_byte(buff, MSG_NEW_CLASS);
-    // class name
-    pack_string_utf8(buff, name, strlen(name));
-    // class loader id
-    pack_long(buff, loader_id);
-    // class code length
-    pack_int(buff, class_data_len);
-    // class code
-    pack_bytes(buff, class_data, class_data_len);
-
+    messager_newclass_header(buff, name, loader_id, class_data_len, class_data);
     // send message
     sender_enqueue(buffs);
   }

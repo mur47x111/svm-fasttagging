@@ -90,13 +90,11 @@ static int open_connection() {
 
 static void close_connection(int sockfd) {
   process_buffs * pb = pb_normal_get(0);
-  buffer * buff = pb->command_buff;
 
-  pack_byte(buff, MSG_CLOSE);
+  messager_close_header(pb->command_buff);
+  send_data(sockfd, pb->command_buff);
 
-  send_data(sockfd, buff);
   pb_normal_release(pb);
-
   close(sockfd);
 }
 

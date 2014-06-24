@@ -38,24 +38,20 @@ union double_jlong {
 };
 
 void pack_boolean(buffer * buff, jboolean to_send);
-
 void pack_byte(buffer * buff, jbyte to_send);
-
 void pack_char(buffer * buff, jchar to_send);
-
 void pack_short(buffer * buff, jshort to_send);
-
 void pack_int(buffer * buff, jint to_send);
-
 void pack_long(buffer * buff, jlong to_send);
-
 void pack_float(buffer * buff, jfloat to_send);
-
 void pack_double(buffer * buff, jdouble to_send);
 
 void pack_string_utf8(buffer * buff, const void * string_utf8,
 		uint16_t size_in_bytes);
-
 void pack_bytes(buffer * buff, const void * data, jint size);
+
+void buff_put_short(buffer * buff, size_t buff_pos, jshort to_put);
+void buff_put_int(buffer * buff, size_t buff_pos, jint to_put);
+void buff_put_long(buffer * buff, size_t buff_pos, jlong to_put);
 
 #endif	/* _BUFFPACK_H */

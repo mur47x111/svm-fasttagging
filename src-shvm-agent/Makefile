@@ -59,7 +59,7 @@ endif
 
 # Source and object files needed to create the library
 SOURCES = ../src-disl-agent/common.c ../src-disl-agent/jvmtiutil.c \
-	buffer.c buffpack.c netref.c blockingqueue.c threadlocal.c \
+	buffer.c buffpack.c netref.c blockingqueue.c threadlocal.c messagetype.c \
 	tagger.c sender.c dislreagent.c processbuffs.c redispatcher.c
 
 HEADERS = $(wildcard *.h)

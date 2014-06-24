@@ -1,26 +1,33 @@
 #ifndef _MESSAGETYPE_H
 #define	_MESSAGETYPE_H
 
-// Messages Types
-//  - should be in sync with java server
+#include <jvmti.h>
 
-// closing connection
-static const jbyte MSG_CLOSE = 0;
-// sending analysis
-static const jbyte MSG_ANALYZE = 1;
-// sending object free
-static const jbyte MSG_OBJ_FREE = 2;
-// sending new class
-static const jbyte MSG_NEW_CLASS = 3;
-// sending class info
-static const jbyte MSG_CLASS_INFO = 4;
-// sending string info
-static const jbyte MSG_STRING_INFO = 5;
-// sending registration for analysis method
-static const jbyte MSG_REG_ANALYSIS = 6;
-// sending thread info
-static const jbyte MSG_THREAD_INFO = 7;
-// sending thread end message
-static const jbyte MSG_THREAD_END = 8;
+#include "buffer.h"
+
+void messager_close_header(buffer *buff);
+
+size_t messager_analyze_header(buffer *buff, jlong ordering_id);
+size_t messager_analyze_item(buffer *buff, jshort analysis_id);
+
+size_t messager_objfree_header(buffer *buff);
+void messager_objfree_item(buffer *buff, jlong tag);
+
+void messager_newclass_header(buffer *buff, const char* name, jlong loader_id,
+    jint class_data_len, const unsigned char* class_data);
+void messager_classinfo_header(buffer *buff, jlong class_tag,
+    const char *class_sig, const char *class_gen, jlong loader_tag,
+    jlong super_class_tag);
+
+void messager_stringinfo_header(buffer *buff, jlong str_tag, const char * str,
+    jsize str_len);
+
+void messager_reganalysis_header(buffer *buff, jshort analysis_id,
+    const char * str, jsize str_len);
+
+void messager_threadinfo_header(buffer *buff, jlong thread_tag, const char *str,
+    jsize str_len, jboolean is_daemon);
+
+void messager_threadend_header(buffer *buff, jlong thread_id);
 
 #endif	/* _MESSAGETYPE_H */

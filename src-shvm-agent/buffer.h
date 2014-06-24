@@ -1,6 +1,8 @@
 #ifndef _BUFFER_H
 #define	_BUFFER_H
 
+#include <stdlib.h>
+
 typedef struct {
 	unsigned char * buff;
 	size_t occupied;

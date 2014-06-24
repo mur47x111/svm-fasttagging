@@ -162,21 +162,9 @@ static void _pack_class_info(buffer * buff, jlong class_net_ref,
 		class_gen = ""; // pack empty string
 	}
 
-	// pack class info message
-
-	// msg id
-	pack_byte(buff, MSG_CLASS_INFO);
-	// class id
-	pack_long(buff, class_net_ref);
-	// class signature
-	pack_string_utf8(buff, class_sig, strlen(class_sig));
-	// class generic string
-	pack_string_utf8(buff, class_gen, strlen(class_gen));
-	// class loader id
-	pack_long(buff, class_loader_net_ref);
-	// super class id
-	pack_long(buff, super_class_net_ref);
-
+  // pack class info message
+  messager_classinfo_header(buff, class_net_ref, class_sig, class_gen,
+      class_loader_net_ref, super_class_net_ref);
 }
 
 static jlong _set_net_reference_for_class(JNIEnv * jni_env,

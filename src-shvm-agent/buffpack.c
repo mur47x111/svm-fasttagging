@@ -57,3 +57,21 @@ void pack_string_utf8(buffer * buff, const void * string_utf8,
 void pack_bytes(buffer * buff, const void * data, jint size) {
 	buffer_fill(buff, data, size);
 }
+
+void buff_put_short(buffer * buff, size_t buff_pos, jshort to_put) {
+  // put the short at the position in network order
+  jshort nts = htons(to_put);
+  buffer_fill_at_pos(buff, buff_pos, &nts, sizeof(jshort));
+}
+
+void buff_put_int(buffer * buff, size_t buff_pos, jint to_put) {
+  // put the int at the position in network order
+  jint nts = htonl(to_put);
+  buffer_fill_at_pos(buff, buff_pos, &nts, sizeof(jint));
+}
+
+void buff_put_long(buffer * buff, size_t buff_pos, jlong to_put) {
+  // put the long at the position in network order
+  jlong nts = htobe64(to_put);
+  buffer_fill_at_pos(buff, buff_pos, &nts, sizeof(jlong));
+}

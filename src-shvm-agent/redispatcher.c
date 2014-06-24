@@ -60,18 +60,6 @@ static void pack_object(JNIEnv * jni_env, buffer * buff, buffer * cmd_buff,
   pack_long(buff, NULL_NET_REF);
 }
 
-static void buff_put_short(buffer * buff, size_t buff_pos, jshort to_put) {
-  // put the short at the position in network order
-  jshort nts = htons(to_put);
-  buffer_fill_at_pos(buff, buff_pos, &nts, sizeof(jshort));
-}
-
-static void buff_put_int(buffer * buff, size_t buff_pos, jint to_put) {
-  // put the int at the position in network order
-  jint nts = htonl(to_put);
-  buffer_fill_at_pos(buff, buff_pos, &nts, sizeof(jint));
-}
-
 // ******************* analysis helper methods *******************
 
 static jvmtiEnv * jvmti_env;
@@ -105,39 +93,6 @@ static jlong next_thread_id() {
   exit_critical_section(jvmti_env, to_buff_lock);
   return result;
 }
-
-static size_t create_analysis_request_header(buffer * buff,
-    jshort analysis_method_id) {
-  // analysis method id
-  pack_short(buff, analysis_method_id);
-
-  // position of the short indicating the length of marshalled arguments
-  size_t pos = buffer_filled(buff);
-
-  // initial value of the length of the marshalled arguments
-  pack_short(buff, 0xBAAD);
-
-  return pos;
-}
-
-static size_t create_analysis_msg(buffer * buff, jlong id) {
-  // create analysis message
-
-  // analysis msg
-  pack_byte(buff, MSG_ANALYZE);
-
-  // thread (total order buffer) id
-  pack_long(buff, id);
-
-  // get pointer to the location where count of requests will stored
-  size_t pos = buffer_filled(buff);
-
-  // request count space initialization
-  pack_int(buff, 0xBAADF00D);
-
-  return pos;
-}
-
 
 static void correct_cmd_buff_pos(buffer * cmd_buff, size_t shift) {
 
@@ -186,14 +141,7 @@ static jshort register_method(JNIEnv * jni_env, jstring analysis_method_desc,
   process_buffs * buffs = pb_utility_get();
   buffer * buff = buffs->analysis_buff;
 
-  // msg id
-  pack_byte(buff, MSG_REG_ANALYSIS);
-  // new id for analysis method
-  pack_short(buff, new_analysis_id);
-  // method descriptor
-  pack_string_utf8(buff, str, str_len);
-
-  // send message
+  messager_reganalysis_header(buff, new_analysis_id, str, str_len);
   sender_enqueue(buffs);
 
   // release string
@@ -219,12 +167,13 @@ static void analysis_start(JNIEnv * jni_env, jshort analysis_method_id,
     tld->analysis_count = 0;
 
     // create analysis message
-    tld->analysis_count_pos = create_analysis_msg(tld->analysis_buff, tld->id);
+    tld->analysis_count_pos = messager_analyze_header(tld->analysis_buff,
+        tld->id);
   }
 
   // create request header, keep track of the position
   // of the length of marshalled arguments
-  tld->args_length_pos = create_analysis_request_header(tld->analysis_buff,
+  tld->args_length_pos = messager_analyze_item(tld->analysis_buff,
       analysis_method_id);
 }
 
@@ -264,7 +213,7 @@ static void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
 
   // create request header, keep track of the position
   // of the length of marshalled arguments
-  tld->args_length_pos = create_analysis_request_header(tld->analysis_buff,
+  tld->args_length_pos = messager_analyze_item(tld->analysis_buff,
       analysis_method_id);
 }
 
@@ -291,8 +240,8 @@ static void analysis_end_buff(tldata * tld) {
       tobs->analysis_count = 0;
 
       // create analysis message
-      tobs->analysis_count_pos = create_analysis_msg(tobs->pb->analysis_buff,
-          tld->to_buff_id);
+      tobs->analysis_count_pos = messager_analyze_header(
+          tobs->pb->analysis_buff, tld->to_buff_id);
     }
 
     // first correct positions in command buffer
@@ -511,35 +460,20 @@ void redispatcher_object_free(jlong tag) {
   {
     // allocate new obj free buffer
     if (obj_free_buff == NULL) {
-
       // obtain buffer
       obj_free_buff = pb_utility_get();
-
       // reset number of events in the buffer
       obj_free_event_count = 0;
-
-      // put initial free object msg id
-      pack_byte(obj_free_buff->analysis_buff, MSG_OBJ_FREE);
-
       // get pointer to the location where count of requests will stored
-      obj_free_event_count_pos = buffer_filled(obj_free_buff->analysis_buff);
-
-      // request count space initialization
-      pack_int(obj_free_buff->analysis_buff, 0xBAADF00D);
+      obj_free_event_count_pos = messager_objfree_header(obj_free_buff->analysis_buff);
     }
 
     // obtain message buffer
     buffer * buff = obj_free_buff->analysis_buff;
-
-    // buffer obj free id
-
-    // obj id
-    pack_long(buff, tag);
-
-    // increment the number of free events
-    ++obj_free_event_count;
+    messager_objfree_item(buff, tag);
 
     // update the number of free events
+    ++obj_free_event_count;
     buff_put_int(buff, obj_free_event_count_pos, obj_free_event_count);
 
     if (obj_free_event_count >= MAX_OBJ_FREE_EVENTS) {
@@ -626,12 +560,7 @@ void redispatcher_thread_end() {
 
   // obtain buffer
   process_buffs * buffs = pb_normal_get(thread_id);
-  buffer * buff = buffs->analysis_buff;
-
-  // msg id
-  pack_byte(buff, MSG_THREAD_END);
-  // thread id
-  pack_long(buff, thread_id);
+  messager_threadend_header(buffs->analysis_buff, thread_id);
 
   // send to object tagging queue - this thread could have something still
   // in the queue so we ensure proper ordering
