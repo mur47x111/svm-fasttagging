@@ -24,14 +24,6 @@ typedef struct {
 
 static to_buff_struct to_buff_array[TO_BUFFER_COUNT];
 
-// *** buffer for object free ***
-
-#define MAX_OBJ_FREE_EVENTS 4096
-
-static process_buffs * obj_free_buff = NULL;
-static jint obj_free_event_count = 0;
-static size_t obj_free_event_count_pos = 0;
-
 // first available id for new messages
 static volatile jshort avail_analysis_id = 1;
 
@@ -211,10 +203,6 @@ static jshort register_method(JNIEnv * jni_env, jstring analysis_method_desc,
 
 static void analysis_start(JNIEnv * jni_env, jshort analysis_method_id,
     tldata * tld) {
-#ifdef DEBUGANL
-  printf("Analysis start enter (thread %ld)\n", tld_get()->id);
-#endif
-
   if (tld->analysis_buff == NULL) {
 
     // mark thread
@@ -238,18 +226,10 @@ static void analysis_start(JNIEnv * jni_env, jshort analysis_method_id,
   // of the length of marshalled arguments
   tld->args_length_pos = create_analysis_request_header(tld->analysis_buff,
       analysis_method_id);
-
-#ifdef DEBUGANL
-  printf("Analysis start exit (thread %ld)\n", tld_get()->id);
-#endif
 }
 
-void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
+static void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
     jbyte ordering_id, tldata * tld) {
-#ifdef DEBUGANL
-  printf("Analysis (buffer) start enter (thread %ld)\n", tld_get()->id);
-#endif
-
   check_error(ordering_id < 0, "Buffer id has negative value");
 
   // flush normal buffers before each global buffering
@@ -286,17 +266,9 @@ void analysis_start_buff(JNIEnv * jni_env, jshort analysis_method_id,
   // of the length of marshalled arguments
   tld->args_length_pos = create_analysis_request_header(tld->analysis_buff,
       analysis_method_id);
-
-#ifdef DEBUGANL
-  printf("Analysis (buffer) start exit (thread %ld)\n", tld_get()->id);
-#endif
 }
 
 static void analysis_end_buff(tldata * tld) {
-#ifdef DEBUGANL
-  printf("Analysis (buffer) end enter (thread %ld)\n", tld_get()->id);
-#endif
-
   // TODO lock for each buffer id
 
   // sending of half-full buffer is done in shutdown hook and obj free hook
@@ -373,10 +345,6 @@ static void analysis_end_buff(tldata * tld) {
 
   // invalidate buffer id
   tld->to_buff_id = INVALID_BUFF_ID;
-
-#ifdef DEBUGANL
-  printf("Analysis (buffer) end exit (thread %ld)\n", tld_get()->id);
-#endif
 }
 
 static void analysis_end(tldata * tld) {
@@ -390,10 +358,6 @@ static void analysis_end(tldata * tld) {
     analysis_end_buff(tld);
     return;
   }
-
-#ifdef DEBUGANL
-  printf("Analysis end enter (thread %ld)\n", tld_get()->id);
-#endif
 
   // sending of half-full buffer is done in thread end hook
 
@@ -416,10 +380,6 @@ static void analysis_end(tldata * tld) {
     // invalidate buffer pointer
     tld->pb = NULL;
   }
-
-#ifdef DEBUGANL
-  printf("Analysis end exit (thread %ld)\n", tld_get()->id);
-#endif
 }
 
 // ******************* REDispatch methods *******************
@@ -538,54 +498,13 @@ void redispatcher_register_natives(JNIEnv * jni_env, jclass klass) {
       sizeof(redispatchMethods) / sizeof(redispatchMethods[0]));
 }
 
-static void send_all_to_buffers() {
-  // send all total ordering buffers - with lock
-  enter_critical_section(jvmti_env, to_buff_lock);
-  {
-    int i;
-    for (i = 0; i < TO_BUFFER_COUNT; ++i) {
+// *** buffer for object free ***
 
-      // send all buffers for occupied ids
-      if (to_buff_array[i].pb != NULL) {
+#define MAX_OBJ_FREE_EVENTS 4096
 
-        // send buffers for object tagging
-        tagger_enqueue(to_buff_array[i].pb);
-
-        // invalidate buffer pointer
-        to_buff_array[i].pb = NULL;
-      }
-    }
-  }
-  exit_critical_section(jvmti_env, to_buff_lock);
-}
-
-static void send_thread_buffers(tldata * tld) {
-  // thread is marked -> worked with buffers
-  jlong thread_id = tld->id;
-  if (thread_id != INVALID_THREAD_ID) {
-    process_buffs *pb = pb_get(thread_id);
-
-    if (pb != NULL) {
-      tagger_enqueue(pb);
-    }
-  }
-
-  tld->analysis_buff = NULL;
-  tld->command_buff = NULL;
-  tld->pb = NULL;
-}
-
-static void send_obj_free_buffer() {
-  // send object free buffer - with lock
-  enter_critical_section(jvmti_env, obj_free_lock);
-  {
-    if (obj_free_buff != NULL) {
-      sender_enqueue(obj_free_buff);
-      obj_free_buff = NULL;
-    }
-  }
-  exit_critical_section(jvmti_env, obj_free_lock);
-}
+static process_buffs * obj_free_buff = NULL;
+static jint obj_free_event_count = 0;
+static size_t obj_free_event_count_pos = 0;
 
 void redispatcher_object_free(jlong tag) {
   enter_critical_section(jvmti_env, obj_free_lock);
@@ -645,6 +564,51 @@ void redispatcher_object_free(jlong tag) {
   exit_critical_section(jvmti_env, obj_free_lock);
 }
 
+static void send_thread_buffers(tldata * tld) {
+  // thread is marked -> worked with buffers
+  jlong thread_id = tld->id;
+  if (thread_id != INVALID_THREAD_ID) {
+    process_buffs *pb = pb_get(thread_id);
+
+    if (pb != NULL) {
+      tagger_enqueue(pb);
+    }
+  }
+
+  tld->analysis_buff = NULL;
+  tld->command_buff = NULL;
+  tld->pb = NULL;
+}
+
+static void send_all_to_buffers() {
+  // send all total ordering buffers - with lock
+  enter_critical_section(jvmti_env, to_buff_lock);
+  {
+    for (int i = 0; i < TO_BUFFER_COUNT; ++i) {
+      // send all buffers for occupied ids
+      if (to_buff_array[i].pb != NULL) {
+        // send buffers for object tagging
+        tagger_enqueue(to_buff_array[i].pb);
+        // invalidate buffer pointer
+        to_buff_array[i].pb = NULL;
+      }
+    }
+  }
+  exit_critical_section(jvmti_env, to_buff_lock);
+}
+
+static void send_obj_free_buffer() {
+  // send object free buffer - with lock
+  enter_critical_section(jvmti_env, obj_free_lock);
+  {
+    if (obj_free_buff != NULL) {
+      sender_enqueue(obj_free_buff);
+      obj_free_buff = NULL;
+    }
+  }
+  exit_critical_section(jvmti_env, obj_free_lock);
+}
+
 void redispatcher_thread_end() {
   // It should be safe to use thread locals according to jvmti documentation:
   // Thread end events are generated by a terminating thread after its initial
@@ -673,6 +637,7 @@ void redispatcher_thread_end() {
   // in the queue so we ensure proper ordering
   tagger_enqueue(buffs);
 }
+
 
 void redispatcher_vm_death() {
   tldata * tld = tld_get();
