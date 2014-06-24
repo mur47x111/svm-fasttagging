@@ -19,6 +19,8 @@
 #include "redispatcher.h"
 #include "tagger.h"
 #include "sender.h"
+#include "globalbuffer.h"
+#include "freehandler.h"
 
 #include "../src-disl-agent/jvmtiutil.h"
 
@@ -200,6 +202,8 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   // init blocking queues
   redispatcher_init(jvmti_env);
   glbuffer_init(jvmti_env);
+
+  fh_init(jvmti_env);
 
   pb_init();
   tagger_init(jvm, jvmti_env);
