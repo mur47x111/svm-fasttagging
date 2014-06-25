@@ -86,17 +86,19 @@ void ot_init(jvmtiEnv * env) {
   check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
 }
 
+static void jvm_set_tag(jobject obj, jlong tag) {
+  jvmtiError error = (*jvmti_env)->SetTag(jvmti_env, obj, tag);
+  check_jvmti_error(jvmti_env, error, "Cannot set object tag");
+}
+
+#ifndef FASTTAGGING
+
 // only retrieves object tag data
 static jlong jvm_get_tag(jobject obj) {
   jlong tag;
   jvmtiError error = (*jvmti_env)->GetTag(jvmti_env, obj, &tag);
   check_jvmti_error(jvmti_env, error, "Cannot get object tag");
   return tag;
-}
-
-static void jvm_set_tag(jobject obj, jlong tag) {
-  jvmtiError error = (*jvmti_env)->SetTag(jvmti_env, obj, tag);
-  check_jvmti_error(jvmti_env, error, "Cannot set object tag");
 }
 
 static int jvm_is_class(jobject obj) {
@@ -114,6 +116,84 @@ static jlong jvm_get_object_class_tag(JNIEnv * jni_env, jobject obj) {
   (*jni_env)->DeleteLocalRef(jni_env, klass);
   return klass_tag;
 }
+
+static jlong jvm_set_tag_object(jobject obj, jlong temp_tag) {
+  jlong tag = 0;
+
+  enter_critical_section(jvmti_env, tagging_lock);
+  {
+    // compare and swap
+    tag = jvm_get_tag(obj);
+
+    if (tag == 0) {
+      jvm_set_tag(obj, temp_tag);
+      tag = temp_tag;
+    }
+  }
+  exit_critical_section(jvmti_env, tagging_lock);
+
+  return tag;
+}
+
+#else
+
+typedef struct {
+  jshort length;
+  jshort padding_0;
+  jint padding_1;
+  char str;
+} Symbol;
+
+typedef struct _oopDesc oopDesc;
+
+typedef struct {
+  jlong padding_0;
+  jlong padding_1;
+  Symbol *name;
+  jlong padding_2[10];
+  oopDesc *java_mirror;
+} Klass;
+
+struct _oopDesc {
+  jlong padding_0;
+  Klass *klass;
+  jlong tag;
+};
+
+static inline oopDesc * dereference(jobject obj) {
+  return (*((oopDesc **) obj));
+}
+
+// only retrieves object tag data
+static jlong jvm_get_tag(jobject obj) {
+  return dereference(obj)->tag;
+}
+
+static int jvm_is_class(jobject obj) {
+  Symbol *name = dereference(obj)->klass->name;
+  return name->length == 15 && strncmp("java/lang/Class", &name->str, 15) == 0;
+}
+
+static jlong jvm_get_object_class_tag(JNIEnv * jni_env, jobject obj) {
+  jclass klass = (jclass) & dereference(obj)->klass->java_mirror;
+  return jvm_get_tag(klass);
+}
+
+static jlong jvm_set_tag_object(jobject obj, jlong temp_tag) {
+  jlong tag = 0;
+
+  jvmtiError error = (*jvmti_env)->CompareAndSwapTag(jvmti_env, obj, temp_tag,
+      (jlong) 0, &tag);
+  check_jvmti_error(jvmti_env, error, "CompareAndSwapTag failed");
+
+  if (tag == 0) {
+    tag = temp_tag;
+  }
+
+  return tag;
+}
+
+#endif
 
 static jlong jvm_set_tag_class(JNIEnv * jni_env, jclass klass, jlong temp) {
   // manage references
@@ -168,24 +248,6 @@ static jlong jvm_set_tag_class(JNIEnv * jni_env, jclass klass, jlong temp) {
 
   // manage references - see function top
   (*jni_env)->PopLocalFrame(jni_env, NULL);
-
-  return tag;
-}
-
-static jlong jvm_set_tag_object(jobject obj, jlong temp_tag) {
-  jlong tag = 0;
-
-  enter_critical_section(jvmti_env, tagging_lock);
-  {
-    // compare and swap
-    tag = jvm_get_tag(obj);
-
-    if (tag == 0) {
-      jvm_set_tag(obj, temp_tag);
-      tag = temp_tag;
-    }
-  }
-  exit_critical_section(jvmti_env, tagging_lock);
 
   return tag;
 }

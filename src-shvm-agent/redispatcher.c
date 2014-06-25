@@ -60,9 +60,6 @@ static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
 
   // NOTE: Tests for class types could be done by buffering threads.
   //       It depends, where we want to have the load.
-  if (STRING_CLASS == NULL) {
-
-  }
 
   // String - pack data
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, STRING_CLASS)) {
