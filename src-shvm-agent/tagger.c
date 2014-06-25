@@ -17,7 +17,6 @@
 
 static JavaVM * java_vm;
 static jvmtiEnv * jvmti_env;
-static jrawMonitorID tagging_lock;
 
 static volatile jclass THREAD_CLASS = NULL;
 static volatile jclass STRING_CLASS = NULL;
@@ -208,16 +207,14 @@ void tagger_init(JavaVM * jvm, jvmtiEnv * env) {
   java_vm = jvm;
   jvmti_env = env;
 
-  jvmtiError error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "object tags",
-      &tagging_lock);
-  check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
-
   bq_create(&objtag_q, BQ_BUFFERS, sizeof(process_buffs *));
 }
 
-void tagger_connect(pthread_t *objtag_thread) {
-  int res = pthread_create(objtag_thread, NULL, tagger_loop, NULL);
-  check_error(res != 0, "Cannot create tagging thread");
+void tagger_connect(pthread_t *objtag_thread, int size) {
+  for (int i = 0; i < size; i++) {
+    int res = pthread_create(&objtag_thread[i], NULL, tagger_loop, NULL);
+    check_error(res != 0, "Cannot create tagging thread");
+  }
 }
 
 void tagger_disconnect(pthread_t *objtag_thread, int size) {
@@ -238,29 +235,4 @@ void tagger_disconnect(pthread_t *objtag_thread, int size) {
 void tagger_enqueue(process_buffs * buffs) {
   buffs->owner_id = PB_OBJTAG;
   bq_push(&objtag_q, &buffs);
-}
-
-void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
-    const char* name, jint class_data_len, const unsigned char* class_data,
-    int jvm_started) {
-  // retrieve class loader net ref
-  jlong loader_id = NULL_TAG;
-
-  // obtain buffer
-  process_buffs * buffs = pb_utility_get();
-  buffer * buff = buffs->analysis_buff;
-
-  // this callback can be called before the jvm is started
-  // the loaded classes are mostly java.lang.*
-  // classes will be (hopefully) loaded by the same class loader
-  // this phase is indicated by NULL_TAG in the class loader id and it
-  // is then handled by server
-  if (jvm_started) {
-    // tag the class loader - with lock
-    loader_id = ot_get_tag(jni_env, loader);
-  }
-
-  messager_newclass_header(buff, name, loader_id, class_data_len, class_data);
-  // send message
-  sender_enqueue(buffs);
 }

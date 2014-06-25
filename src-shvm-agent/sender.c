@@ -106,11 +106,35 @@ static blocking_queue send_q;
 
 static volatile int no_sending_work = 0;
 
+static buffer * meta_buff;
+
+pthread_mutex_t sender_lock;
+
 static void *sender_loop(void * obj) {
   int sockfd = open_connection();
 
+  buffer * meta_buff_swap = malloc(sizeof(buffer));
+  buffer_alloc (meta_buff_swap);
+
   // exit when the jvm is terminated and there are no msg to process
   while (!(no_sending_work && bq_length(&send_q) == 0)) {
+    // meta buffer contains NewClass event and ClassInfo event,
+    // will be sent first
+    if (meta_buff->occupied > 0) {
+      //swap meta buffer
+      pthread_mutex_lock(&sender_lock);
+      {
+        buffer *temp = meta_buff_swap;
+        meta_buff_swap = meta_buff;
+        meta_buff = temp;
+      }
+      pthread_mutex_unlock(&sender_lock);
+
+      // send meta buffer
+      send_data(sockfd, meta_buff_swap);
+      buffer_clean(meta_buff_swap);
+    }
+
     // get buffer
     // TODO thread could timeout here with timeout about 5 sec and check
     // if all of the buffers are allocated by the application threads
@@ -140,12 +164,20 @@ static void *sender_loop(void * obj) {
 void sender_init(char *options) {
   parse_agent_options(options);
 
+  int pmi = pthread_mutex_init(&sender_lock, NULL);
+  check_std_error(pmi != 0, "Cannot create pthread mutex");
+
   bq_create(&send_q, BQ_BUFFERS + BQ_UTILITY, sizeof(process_buffs *));
+
+  meta_buff = malloc(sizeof(buffer));
+  buffer_alloc(meta_buff);
 }
 
-void sender_connect(pthread_t *sender_thread) {
-  int res = pthread_create(sender_thread, NULL, sender_loop, NULL);
-  check_error(res != 0, "Cannot create sending thread");
+void sender_connect(pthread_t *sender_thread, int size) {
+  for (int i = 0; i < size; i++) {
+    int res = pthread_create(&sender_thread[i], NULL, sender_loop, NULL);
+    check_error(res != 0, "Cannot create sending thread");
+  }
 }
 
 void sender_disconnect(pthread_t *sender_thread, int size) {
@@ -174,4 +206,24 @@ void sender_enqueue(process_buffs * pb) {
   }
 
   bq_push(&send_q, &pb);
+}
+
+void sender_newclass(const char* name, jlong loader_id, jint class_data_len,
+    const unsigned char* class_data) {
+  pthread_mutex_lock(&sender_lock);
+  {
+    messager_newclass_header(meta_buff, name, loader_id, class_data_len,
+        class_data);
+  }
+  pthread_mutex_unlock(&sender_lock);
+}
+
+void sender_classinfo(jlong tag, const char* class_sig, const char* class_gen,
+    jlong class_loader_tag, jlong super_class_tag) {
+  pthread_mutex_lock(&sender_lock);
+  {
+    messager_classinfo_header(meta_buff, tag, class_sig, class_gen,
+        class_loader_tag, super_class_tag);
+  }
+  pthread_mutex_unlock(&sender_lock);
 }

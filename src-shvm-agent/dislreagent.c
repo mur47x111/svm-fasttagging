@@ -41,8 +41,20 @@ void JNICALL jvmti_callback_class_file_load_hook(jvmtiEnv *jvmti_env,
     const char* name, jobject protection_domain, jint class_data_len,
     const unsigned char* class_data, jint* new_class_data_len,
     unsigned char** new_class_data) {
-  tagger_newclass(jni_env, jvmti_env, loader, name, class_data_len, class_data,
-      jvm_started);
+  // retrieve class loader net ref
+  jlong loader_id = NULL_TAG;
+
+  // this callback can be called before the jvm is started
+  // the loaded classes are mostly java.lang.*
+  // classes will be (hopefully) loaded by the same class loader
+  // this phase is indicated by NULL_TAG in the class loader id and it
+  // is then handled by server
+  if (jvm_started) {
+    // tag the class loader - with lock
+    loader_id = ot_get_tag(jni_env, loader);
+  }
+
+  sender_newclass(name, loader_id, class_data_len, class_data);
 }
 
 // registers all native methods so they can be used during VM init phase
@@ -50,27 +62,24 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
     JNIEnv* jni_env, jthread thread, jclass klass) {
   static long registedFlag = 0;
 
-  if (registedFlag) {
-    // might fail due to phase problem
-    (*jvmti_env)->SetEventNotificationMode(jvmti_env, JVMTI_DISABLE,
-        JVMTI_EVENT_CLASS_PREPARE, NULL);
-    return;
+  if (!registedFlag) {
+    char * class_sig;
+    jvmtiError error = (*jvmti_env)->GetClassSignature(jvmti_env, klass,
+        &class_sig,
+        NULL);
+    check_jvmti_error(jvmti_env, error, "Cannot get class signature");
+
+    if (strcmp(class_sig, "Lch/usi/dag/dislre/REDispatch;") == 0) {
+      redispatcher_register_natives(jni_env, klass);
+      registedFlag = 1;
+    }
+
+    // deallocate memory
+    error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *) class_sig);
+    check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
   }
 
-  char * class_sig;
-  jvmtiError error = (*jvmti_env)->GetClassSignature(jvmti_env, klass,
-      &class_sig,
-      NULL);
-  check_jvmti_error(jvmti_env, error, "Cannot get class signature");
-
-  if (strcmp(class_sig, "Lch/usi/dag/dislre/REDispatch;") == 0) {
-    redispatcher_register_natives(jni_env, klass);
-    registedFlag = 1;
-  }
-
-  // deallocate memory
-  error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *) class_sig);
-  check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
+  ot_get_tag(jni_env, klass);
 }
 
 void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
@@ -79,9 +88,7 @@ void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) 
 
 void JNICALL jvmti_callback_vm_init_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env,
     jthread thread) {
-  for (int i = 0; i < TAGGING_THREAD_NUM; i++) {
-    tagger_connect(&objtag_thread[i]);
-  }
+  tagger_connect(objtag_thread, TAGGING_THREAD_NUM);
 }
 
 void JNICALL jvmti_callback_object_free_hook(jvmtiEnv *jvmti_env, jlong tag) {
@@ -220,16 +227,16 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   check_jvmti_error(jvmti_env, error, "Cannot set thread end hook");
 
   // init blocking queues
+  pb_init();
+
   glbuffer_init(jvmti_env);
   fh_init(jvmti_env);
   ot_init(jvmti_env);
-  pb_init();
+
   tagger_init(jvm, jvmti_env);
   sender_init(options);
 
-  for (int i = 0; i < SENDING_THREAD_NUM; i++) {
-    sender_connect(&sender_thread[i]);
-  }
+  sender_connect(sender_thread, SENDING_THREAD_NUM);
 
   return 0;
 }

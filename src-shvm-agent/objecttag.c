@@ -151,11 +151,8 @@ static jlong jvm_set_tag_class(JNIEnv * jni_env, jclass klass, jlong temp) {
 
     if (tag == 0) {
       // pack class info into buffer
-      process_buffs * buffs = pb_utility_get();
-      messager_classinfo_header(buffs->analysis_buff, temp, class_sig,
-          class_gen == NULL ? "" : class_gen, class_loader_tag,
-          super_class_tag);
-      sender_enqueue(buffs);
+      sender_classinfo(temp, class_sig, class_gen == NULL ? "" : class_gen,
+          class_loader_tag, super_class_tag);
 
       jvm_set_tag(klass, temp);
       tag = temp;
