@@ -3,6 +3,7 @@
 
 #include <jvmti.h>
 
-void redispatcher_register_natives(JNIEnv * jni_env, jclass klass);
+void redispatcher_register_natives(JNIEnv * jni_env, jvmtiEnv * jvmti,
+    jclass klass);
 
 #endif	/* _REDISPATCHER_H */

@@ -5,8 +5,8 @@
 #include "shared/buffpack.h"
 
 #include "pbmanager.h"
-#include "tagger.h"
 #include "globalbuffer.h"
+#include "sender.h"
 
 #include "../src-disl-agent/jvmtiutil.h"
 
@@ -58,7 +58,7 @@ void tl_insert_analysis_item_ordering(jshort analysis_method_id,
     tld->command_buff = NULL;
 
     // send buffers for object tagging
-    tagger_enqueue(tld->pb);
+    sender_enqueue(tld->pb);
     // invalidate buffer pointer
     tld->pb = NULL;
   }
@@ -125,7 +125,7 @@ void tl_analysis_end() {
       tld->command_buff = NULL;
 
       // send buffers for object tagging
-      tagger_enqueue(tld->pb);
+      sender_enqueue(tld->pb);
 
       // invalidate buffer pointer
       tld->pb = NULL;
@@ -142,7 +142,7 @@ void tl_send_buffer() {
     process_buffs *pb = pb_get(thread_id);
 
     if (pb != NULL) {
-      tagger_enqueue(pb);
+      sender_enqueue(pb);
     }
   }
 
@@ -170,5 +170,5 @@ void tl_thread_end() {
 
   // send to object tagging queue - this thread could have something still
   // in the queue so we ensure proper ordering
-  tagger_enqueue(buffs);
+  sender_enqueue(buffs);
 }

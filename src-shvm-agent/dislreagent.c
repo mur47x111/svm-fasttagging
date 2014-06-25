@@ -17,7 +17,6 @@
 
 #include "pbmanager.h"
 #include "redispatcher.h"
-#include "tagger.h"
 #include "sender.h"
 #include "globalbuffer.h"
 #include "tlocalbuffer.h"
@@ -26,12 +25,9 @@
 
 #include "../src-disl-agent/jvmtiutil.h"
 
-#define TAGGING_THREAD_NUM 1
-
 // FIXME current design does not support multiple sending threads
 #define SENDING_THREAD_NUM 1
 
-static pthread_t objtag_thread[TAGGING_THREAD_NUM];
 static pthread_t sender_thread[SENDING_THREAD_NUM];
 
 static int jvm_started = 0;
@@ -65,12 +61,11 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
   if (!registedFlag) {
     char * class_sig;
     jvmtiError error = (*jvmti_env)->GetClassSignature(jvmti_env, klass,
-        &class_sig,
-        NULL);
+        &class_sig, NULL);
     check_jvmti_error(jvmti_env, error, "Cannot get class signature");
 
     if (strcmp(class_sig, "Lch/usi/dag/dislre/REDispatch;") == 0) {
-      redispatcher_register_natives(jni_env, klass);
+      redispatcher_register_natives(jni_env, jvmti_env, klass);
       registedFlag = 1;
     }
 
@@ -84,11 +79,6 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
 
 void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
   jvm_started = 1;
-}
-
-void JNICALL jvmti_callback_vm_init_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env,
-    jthread thread) {
-  tagger_connect(objtag_thread, TAGGING_THREAD_NUM);
 }
 
 void JNICALL jvmti_callback_object_free_hook(jvmtiEnv *jvmti_env, jlong tag) {
@@ -121,8 +111,7 @@ void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) 
   //ResumeThread
   //GetThreadState
 
-  // shutdown - first tagging then sending thread
-  tagger_disconnect(objtag_thread, TAGGING_THREAD_NUM);
+  // shutdown
   sender_disconnect(sender_thread, SENDING_THREAD_NUM);
 
   pb_free();
@@ -190,7 +179,6 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   callbacks.ClassPrepare = &jvmti_callback_class_prepare_hook;
   callbacks.ObjectFree = &jvmti_callback_object_free_hook;
   callbacks.VMStart = &jvmti_callback_vm_start_hook;
-  callbacks.VMInit = &jvmti_callback_vm_init_hook;
   callbacks.VMDeath = &jvmti_callback_vm_death_hook;
   callbacks.ThreadEnd = &jvmti_callback_thread_end_hook;
 
@@ -215,10 +203,6 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   check_jvmti_error(jvmti_env, error, "Cannot set jvm start hook");
 
   error = (*jvmti_env)->SetEventNotificationMode(jvmti_env, JVMTI_ENABLE,
-      JVMTI_EVENT_VM_INIT, NULL);
-  check_jvmti_error(jvmti_env, error, "Cannot set jvm init hook");
-
-  error = (*jvmti_env)->SetEventNotificationMode(jvmti_env, JVMTI_ENABLE,
       JVMTI_EVENT_VM_DEATH, NULL);
   check_jvmti_error(jvmti_env, error, "Cannot set jvm death hook");
 
@@ -233,7 +217,6 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
   fh_init(jvmti_env);
   ot_init(jvmti_env);
 
-  tagger_init(jvm, jvmti_env);
   sender_init(options);
 
   sender_connect(sender_thread, SENDING_THREAD_NUM);

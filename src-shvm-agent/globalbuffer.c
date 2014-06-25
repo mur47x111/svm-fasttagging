@@ -5,7 +5,7 @@
 #include "shared/messagetype.h"
 
 #include "pbmanager.h"
-#include "tagger.h"
+#include "sender.h"
 
 #include "../src-disl-agent/jvmtiutil.h"
 
@@ -36,25 +36,6 @@ static void glbuffer_new(to_buff_struct *tobs, tldata * tld) {
       tld->to_buff_id);
 }
 
-static void correct_cmd_buff_pos(buffer * cmd_buff, size_t shift) {
-  size_t cmd_buff_len = buffer_filled(cmd_buff);
-  size_t read = 0;
-
-  objtag_rec ot_rec;
-
-  // go through all records and shift the buffer position
-  while (read < cmd_buff_len) {
-    // read ot_rec data
-    buffer_read(cmd_buff, read, &ot_rec, sizeof(ot_rec));
-    // shift buffer position
-    ot_rec.buff_pos += shift;
-    // write ot_rec data
-    buffer_fill_at_pos(cmd_buff, read, &ot_rec, sizeof(ot_rec));
-    // next
-    read += sizeof(ot_rec);
-  }
-}
-
 void glbuffer_commit() {
   tldata * tld = tld_get();
 
@@ -67,13 +48,6 @@ void glbuffer_commit() {
     if (tobs->pb == NULL) {
       glbuffer_new(tobs, tld);
     }
-
-    // first correct positions in command buffer
-    // records in command buffer are positioned according to the local
-    // analysis buffer but we want the position to be valid in total ordered
-    // buffer
-    correct_cmd_buff_pos(tld->local_pb->command_buff,
-        buffer_filled(tobs->pb->analysis_buff));
 
     // fill total order buffers
     buffer_fill(tobs->pb->analysis_buff,
@@ -101,7 +75,7 @@ void glbuffer_commit() {
     // send only when the method count is reached
     if (tobs->analysis_count >= ANALYSIS_COUNT) {
       // send buffers for object tagging
-      tagger_enqueue(tobs->pb);
+      sender_enqueue(tobs->pb);
       // invalidate buffer pointer
       tobs->pb = NULL;
     }
@@ -117,7 +91,7 @@ void glbuffer_sendall() {
       // send all buffers for occupied ids
       if (to_buff_array[i].pb != NULL) {
         // send buffers for object tagging
-        tagger_enqueue(to_buff_array[i].pb);
+        sender_enqueue(to_buff_array[i].pb);
         // invalidate buffer pointer
         to_buff_array[i].pb = NULL;
       }
