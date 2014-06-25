@@ -10,22 +10,9 @@
 
 // ******************* Net reference routines *******************
 
-unsigned char net_ref_get_spec(jlong net_ref);
-
-void net_ref_set_spec(jlong * net_ref, unsigned char spec);
-
-// only retrieves object tag data
-jlong get_tag(jvmtiEnv * jvmti_env, jobject obj);
-
-// retrieves net_reference - performs tagging if necessary
-// can be used for any object - even classes
-// !!! invocation of this method should be protected by lock until the reference
-// is queued for sending
-jlong get_net_reference(JNIEnv * jni_env, jvmtiEnv * jvmti_env,
-		buffer * new_obj_buff, jobject obj);
-
-// !!! invocation of this method should be protected by lock until the reference
-// is queued for sending
-void update_net_reference(jvmtiEnv * jvmti_env, jobject obj, jlong net_ref);
+void ot_init(jvmtiEnv * env);
+jlong ot_get_tag(JNIEnv * jni_env, jobject obj);
+int ot_is_spec_set(jlong tag);
+void ot_set_spec(jobject obj, jlong tag);
 
 #endif	/* _NETREF_H */

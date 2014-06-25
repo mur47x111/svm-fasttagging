@@ -22,10 +22,11 @@
 #include "globalbuffer.h"
 #include "tlocalbuffer.h"
 #include "freehandler.h"
+#include "objecttag.h"
 
 #include "../src-disl-agent/jvmtiutil.h"
 
-#define TAGGING_THREAD_NUM 2
+#define TAGGING_THREAD_NUM 1
 
 // FIXME current design does not support multiple sending threads
 #define SENDING_THREAD_NUM 1
@@ -220,9 +221,8 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
   // init blocking queues
   glbuffer_init(jvmti_env);
-
   fh_init(jvmti_env);
-
+  ot_init(jvmti_env);
   pb_init();
   tagger_init(jvm, jvmti_env);
   sender_init(options);

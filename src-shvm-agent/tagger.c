@@ -61,12 +61,6 @@ static void ot_pack_thread_data(JNIEnv * jni_env, buffer * buff,
       info.is_daemon);
 }
 
-static void update_send_status(jobject to_send, jlong * net_ref) {
-
-  net_ref_set_spec(net_ref, 1);
-  update_net_reference(jvmti_env, to_send, *net_ref);
-}
-
 static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
     jobject to_send, unsigned char obj_type, buffer * new_objs_buff) {
 
@@ -74,7 +68,7 @@ static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
   // that multiple threads will send it, but this will hurt only performance
 
   // test if the data was already sent to the server
-  if (net_ref_get_spec(*net_ref) == 1) {
+  if (ot_is_spec_set(*net_ref)) {
     return;
   }
 
@@ -83,24 +77,21 @@ static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
 
   // String - pack data
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, STRING_CLASS)) {
-
-    update_send_status(to_send, net_ref);
+    ot_set_spec(to_send, *net_ref);
     ot_pack_string_data(jni_env, new_objs_buff, to_send, *net_ref);
   }
 
   // Thread - pack data
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, THREAD_CLASS)) {
-
-    update_send_status(to_send, net_ref);
+    ot_set_spec(to_send, *net_ref);
     ot_pack_thread_data(jni_env, new_objs_buff, to_send, *net_ref);
   }
 }
 
 static void ot_tag_record(JNIEnv * jni_env, buffer * buff, size_t buff_pos,
     jobject to_send, unsigned char obj_type, buffer * new_objs_buff) {
-
   // get net reference
-  jlong net_ref = get_net_reference(jni_env, jvmti_env, new_objs_buff, to_send);
+  jlong net_ref = ot_get_tag(jni_env, to_send);
 
   // send additional data
   if (obj_type == OT_DATA_OBJECT) {
@@ -184,31 +175,26 @@ static void * tagger_loop(void * obj) {
     process_buffs * pb;
     bq_pop(&objtag_q, &pb);
 
-    // tag the objects - with lock
-    enter_critical_section(jvmti_env, tagging_lock);
-    {
-      // tag objcects from buffer
-      // note that analysis buffer is not required
-      ot_tag_buff(jni_env, pb->analysis_buff, pb->command_buff, new_obj_buff);
+    // tag objcects from buffer
+    // note that analysis buffer is not required
+    ot_tag_buff(jni_env, pb->analysis_buff, pb->command_buff, new_obj_buff);
 
-      // exchange command_buff and new_obj_buff
-      buffer * old_cmd_buff = pb->command_buff;
-      pb->command_buff = new_obj_buff;
+    // exchange command_buff and new_obj_buff
+    buffer * old_cmd_buff = pb->command_buff;
+    pb->command_buff = new_obj_buff;
 
-      // send buffer
-      sender_enqueue(pb);
+    // send buffer
+    sender_enqueue(pb);
 
-      // global references are released after buffer is send
-      // this is critical for ensuring that proper ordering of events
-      // is maintained - see object free event for more info
+    // global references are released after buffer is send
+    // this is critical for ensuring that proper ordering of events
+    // is maintained - see object free event for more info
 
-      ot_relese_global_ref(jni_env, old_cmd_buff);
+    ot_relese_global_ref(jni_env, old_cmd_buff);
 
-      // clean old_cmd_buff and make it as new_obj_buff for the next round
-      buffer_clean(old_cmd_buff);
-      new_obj_buff = old_cmd_buff;
-    }
-    exit_critical_section(jvmti_env, tagging_lock);
+    // clean old_cmd_buff and make it as new_obj_buff for the next round
+    buffer_clean(old_cmd_buff);
+    new_obj_buff = old_cmd_buff;
   }
 
   buffer_free(new_obj_buff);
@@ -271,12 +257,7 @@ void tagger_newclass(JNIEnv* jni_env, jvmtiEnv *jvmti_env, jobject loader,
   // is then handled by server
   if (jvm_started) {
     // tag the class loader - with lock
-    enter_critical_section(jvmti_env, tagging_lock);
-    {
-      loader_id = get_net_reference(jni_env, jvmti_env, buffs->command_buff,
-          loader);
-    }
-    exit_critical_section(jvmti_env, tagging_lock);
+    loader_id = ot_get_tag(jni_env, loader);
   }
 
   messager_newclass_header(buff, name, loader_id, class_data_len, class_data);

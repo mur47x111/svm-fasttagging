@@ -6,6 +6,9 @@
 #include "shared/buffpack.h"
 #include "shared/messagetype.h"
 
+#include "sender.h"
+#include "pbmanager.h"
+
 #include "../src-disl-agent/jvmtiutil.h"
 
 // first available object id
@@ -22,9 +25,7 @@ static inline jlong next_class_id() {
   return __sync_fetch_and_add(&avail_class_id, 1);
 }
 
-// ******************* Net reference get/set routines *******************
-
-// should be in sync with NetReference on the server
+// ******************* get/set tag routines *******************
 
 // format of net reference looks like this (from HIGHEST)
 // 1 bit data trans., 1 bit class instance, 23 bits class id, 40 bits object id
@@ -47,266 +48,185 @@ static inline jlong next_class_id() {
 // get bits from "from" with pattern "bit_mask" lowest bit starting on position
 // "low_start" (from 0)
 static inline uint64_t get_bits(uint64_t from, uint64_t bit_mask,
-		uint8_t low_start) {
-
-	// shift it
-	uint64_t bits_shifted = from >> low_start;
-
-	// mask it
-	return bits_shifted & bit_mask;
+    uint8_t low_start) {
+  uint64_t bits_shifted = from >> low_start;
+  return bits_shifted & bit_mask;
 }
 
 // set bits "bits" to "to" with pattern "bit_mask" lowest bit starting on
 // position "low_start" (from 0)
-static inline void set_bits(uint64_t * to, uint64_t bits,
-		uint64_t bit_mask, uint8_t low_start) {
-
-	// mask it
-	uint64_t bits_len = bits & bit_mask;
-	// move it to position
-	uint64_t bits_pos = bits_len << low_start;
-	// set
-	*to |= bits_pos;
+static inline void set_bits(uint64_t * to, uint64_t bits, uint64_t bit_mask,
+    uint8_t low_start) {
+  uint64_t bits_len = bits & bit_mask;
+  uint64_t bits_pos = bits_len << low_start;
+  *to |= bits_pos;
 }
 
-inline jlong net_ref_get_object_id(jlong net_ref) {
+static inline jlong fold_tag(jlong object_id, jint class_id, unsigned char spec,
+    unsigned char cbit) {
+  jlong tag = 0;
 
-	return get_bits(net_ref, OBJECT_ID_MASK, OBJECT_ID_POS);
-}
-
-inline jint net_ref_get_class_id(jlong net_ref) {
-
-	return get_bits(net_ref, CLASS_ID_MASK, CLASS_ID_POS);
-}
-
-unsigned char net_ref_get_spec(jlong net_ref) {
-
-	return get_bits(net_ref, SPEC_MASK, SPEC_POS);
-}
-
-inline unsigned char net_ref_get_class_instance_bit(jlong net_ref) {
-
-	return get_bits(net_ref, CLASS_INSTANCE_MASK, CLASS_INSTANCE_POS);
-}
-
-inline void net_ref_set_object_id(jlong * net_ref, jlong object_id) {
-
-	set_bits((uint64_t *)net_ref, object_id, OBJECT_ID_MASK, OBJECT_ID_POS);
-}
-
-inline void net_ref_set_class_id(jlong * net_ref, jint class_id) {
-
-	set_bits((uint64_t *)net_ref, class_id, CLASS_ID_MASK, CLASS_ID_POS);
-}
-
-inline void net_ref_set_class_instance(jlong * net_ref, unsigned char cibit) {
-
-	set_bits((uint64_t *)net_ref, cibit, CLASS_INSTANCE_MASK, CLASS_INSTANCE_POS);
-}
-
-void net_ref_set_spec(jlong * net_ref, unsigned char spec) {
-
-	set_bits((uint64_t *)net_ref, spec, SPEC_MASK, SPEC_POS);
-}
-
-// ******************* Net reference routines *******************
-
-// TODO comment
-
-// only retrieves object tag data
-jlong get_tag(jvmtiEnv * jvmti_env, jobject obj) {
-  jlong tag;
-
-  jvmtiError error = (*jvmti_env)->GetTag(jvmti_env, obj, &tag);
-  check_jvmti_error(jvmti_env, error, "Cannot get object tag");
+  set_bits((uint64_t *) &tag, object_id, OBJECT_ID_MASK, OBJECT_ID_POS);
+  set_bits((uint64_t *) &tag, class_id, CLASS_ID_MASK, CLASS_ID_POS);
+  set_bits((uint64_t *) &tag, spec, SPEC_MASK, SPEC_POS);
+  set_bits((uint64_t *) &tag, cbit, CLASS_INSTANCE_MASK,
+  CLASS_INSTANCE_POS);
 
   return tag;
 }
 
-// forward declaration
-jlong get_net_reference(JNIEnv * jni_env, jvmtiEnv * jvmti_env,
-		buffer * new_obj_buff, jobject obj);
+static jvmtiEnv * jvmti_env;
+static jrawMonitorID tagging_lock;
 
-// !!! returned local reference should be freed
-static jclass _get_class_for_object(JNIEnv * jni_env, jobject obj) {
+void ot_init(jvmtiEnv * env) {
+  jvmti_env = env;
 
-	return (*jni_env)->GetObjectClass(jni_env, obj);
+  jvmtiError error = (*jvmti_env)->CreateRawMonitor(jvmti_env, "object tags",
+      &tagging_lock);
+  check_jvmti_error(jvmti_env, error, "Cannot create raw monitor");
 }
 
-static int _object_is_class(jvmtiEnv * jvmti_env,  jobject obj) {
-
-	// TODO isn't there better way?
-
-	jvmtiError error =
-			(*jvmti_env)->GetClassSignature(jvmti_env, obj, NULL, NULL);
-	return error == JVMTI_ERROR_NONE;
+// only retrieves object tag data
+static jlong jvm_get_tag(jobject obj) {
+  jlong tag;
+  jvmtiError error = (*jvmti_env)->GetTag(jvmti_env, obj, &tag);
+  check_jvmti_error(jvmti_env, error, "Cannot get object tag");
+  return tag;
 }
 
-// does not increment any counter - just sets the values
-static jlong _set_net_reference(jvmtiEnv * jvmti_env, jobject obj,
-		jlong object_id, jint class_id, unsigned char spec, unsigned char cbit) {
-
-	jlong net_ref = 0;
-
-	net_ref_set_object_id(&net_ref, object_id);
-	net_ref_set_class_id(&net_ref, class_id);
-	net_ref_set_spec(&net_ref, spec);
-	net_ref_set_class_instance(&net_ref, cbit);
-
-	jvmtiError error = (*jvmti_env)->SetTag(jvmti_env, obj, net_ref);
-	check_jvmti_error(jvmti_env, error, "Cannot set object tag");
-
-	return net_ref;
+static void jvm_set_tag(jobject obj, jlong tag) {
+  jvmtiError error = (*jvmti_env)->SetTag(jvmti_env, obj, tag);
+  check_jvmti_error(jvmti_env, error, "Cannot set object tag");
 }
 
-static void _pack_class_info(buffer * buff, jlong class_net_ref,
-		char * class_sig, char * class_gen, jlong class_loader_net_ref,
-		jlong super_class_net_ref) {
-
-	// class gen can be NULL, we have to handle it
-	if(class_gen == NULL) {
-		class_gen = ""; // pack empty string
-	}
-
-  // pack class info message
-  messager_classinfo_header(buff, class_net_ref, class_sig, class_gen,
-      class_loader_net_ref, super_class_net_ref);
+static int jvm_is_class(jobject obj) {
+  // TODO isn't there better way?
+  jvmtiError error = (*jvmti_env)->GetClassSignature(jvmti_env, obj, NULL,
+  NULL);
+  return error == JVMTI_ERROR_NONE;
 }
 
-static jlong _set_net_reference_for_class(JNIEnv * jni_env,
-		jvmtiEnv * jvmti_env, buffer * buff, jclass klass) {
+static jlong jvm_get_object_class_tag(JNIEnv * jni_env, jobject obj) {
+  jclass klass = (*jni_env)->GetObjectClass(jni_env, obj);
+  jlong klass_tag = ot_get_tag(jni_env, klass);
 
-	// manage references
-	// http://docs.oracle.com/javase/6/docs/platform/jvmti/jvmti.html#refs
-	static const jint ADD_REFS = 16;
-	jint res = (*jni_env)->PushLocalFrame(jni_env, ADD_REFS);
-	check_error(res != 0, "Cannot allocate more references");
-
-	// *** set net reference for class ***
-
-	// assign new net reference - set spec to 1 (binding send over network)
-	jlong net_ref = _set_net_reference(jvmti_env, klass,
-	    next_object_id(), next_class_id(), 1, 1);
-
-	// *** pack class info into buffer ***
-
-	jvmtiError error;
-
-	// resolve descriptor + generic
-	char * class_sig;
-	char * class_gen;
-	error = (*jvmti_env)->GetClassSignature(jvmti_env, klass, &class_sig,
-			&class_gen);
-	check_jvmti_error(jvmti_env, error, "Cannot get class signature");
-
-	// resolve class loader...
-	jobject class_loader;
-	error = (*jvmti_env)->GetClassLoader(jvmti_env, klass, &class_loader);
-	check_jvmti_error(jvmti_env, error, "Cannot get class loader");
-	// ... + class loader id
-	jlong class_loader_net_ref =
-			get_net_reference(jni_env, jvmti_env, buff, class_loader);
-
-	// resolve super class...
-	jclass super_class = (*jni_env)->GetSuperclass(jni_env, klass);
-	// ... + super class id
-	jlong super_class_net_ref =
-			get_net_reference(jni_env, jvmti_env, buff, super_class);
-
-	// pack class info into buffer
-	_pack_class_info(buff, net_ref, class_sig, class_gen, class_loader_net_ref,
-			super_class_net_ref);
-
-	// deallocate memory
-	error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)class_sig);
-	check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
-	error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)class_gen);
-	check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
-
-	// manage references - see function top
-	(*jni_env)->PopLocalFrame(jni_env, NULL);
-
-	return net_ref;
+  // free local reference
+  (*jni_env)->DeleteLocalRef(jni_env, klass);
+  return klass_tag;
 }
 
-static jint _get_class_id_for_class(JNIEnv * jni_env, jvmtiEnv * jvmti_env,
-		buffer * buff, jclass klass) {
+static jlong jvm_set_tag_class(JNIEnv * jni_env, jclass klass, jlong temp) {
+  // manage references
+  // http://docs.oracle.com/javase/6/docs/platform/jvmti/jvmti.html#refs
+  static const jint ADD_REFS = 16;
+  jint res = (*jni_env)->PushLocalFrame(jni_env, ADD_REFS);
+  check_error(res != 0, "Cannot allocate more references");
 
-	jlong class_net_ref = get_tag(jvmti_env, klass);
+  // *** pack class info into buffer ***
+  jvmtiError error;
 
-	if(class_net_ref == 0) {
-		class_net_ref =
-				_set_net_reference_for_class(jni_env, jvmti_env, buff, klass);
-	}
+  // resolve descriptor + generic
+  char * class_sig;
+  char * class_gen;
+  error = (*jvmti_env)->GetClassSignature(jvmti_env, klass, &class_sig,
+      &class_gen);
+  check_jvmti_error(jvmti_env, error, "Cannot get class signature");
 
-	return net_ref_get_class_id(class_net_ref);
+  // get class loader tag
+  jobject class_loader;
+  error = (*jvmti_env)->GetClassLoader(jvmti_env, klass, &class_loader);
+  check_jvmti_error(jvmti_env, error, "Cannot get class loader");
+  jlong class_loader_tag = ot_get_tag(jni_env, class_loader);
+
+  // get super class tag
+  jclass super_class = (*jni_env)->GetSuperclass(jni_env, klass);
+  jlong super_class_tag = ot_get_tag(jni_env, super_class);
+
+  jlong tag = 0;
+
+  enter_critical_section(jvmti_env, tagging_lock);
+  {
+    // compare and swap
+    tag = jvm_get_tag(klass);
+
+    if (tag == 0) {
+      // pack class info into buffer
+      process_buffs * buffs = pb_utility_get();
+      messager_classinfo_header(buffs->analysis_buff, temp, class_sig,
+          class_gen == NULL ? "" : class_gen, class_loader_tag,
+          super_class_tag);
+      sender_enqueue(buffs);
+
+      jvm_set_tag(klass, temp);
+      tag = temp;
+    }
+  }
+  exit_critical_section(jvmti_env, tagging_lock);
+
+  // deallocate memory
+  error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *) class_sig);
+  check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
+  error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *) class_gen);
+  check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
+
+  // manage references - see function top
+  (*jni_env)->PopLocalFrame(jni_env, NULL);
+
+  return tag;
 }
 
-static jint _get_class_id_for_object(JNIEnv * jni_env, jvmtiEnv * jvmti_env,
-		buffer * buff, jobject obj) {
+static jlong jvm_set_tag_object(jobject obj, jlong temp_tag) {
+  jlong tag = 0;
 
-	// get class of this object
-	jclass klass = _get_class_for_object(jni_env, obj);
+  enter_critical_section(jvmti_env, tagging_lock);
+  {
+    // compare and swap
+    tag = jvm_get_tag(obj);
 
-	// get class id of this class
-	jint class_id = _get_class_id_for_class(jni_env, jvmti_env, buff, klass);
+    if (tag == 0) {
+      jvm_set_tag(obj, temp_tag);
+      tag = temp_tag;
+    }
+  }
+  exit_critical_section(jvmti_env, tagging_lock);
 
-	// free local reference
-	(*jni_env)->DeleteLocalRef(jni_env, klass);
-
-	return class_id;
+  return tag;
 }
 
-static jlong _set_net_reference_for_object(JNIEnv * jni_env,
-		jvmtiEnv * jvmti_env, buffer * buff, jobject obj) {
+jlong ot_get_tag(JNIEnv * jni_env, jobject obj) {
+  if (obj == NULL) { // net reference for NULL is 0
+    return 0;
+  }
 
-	// resolve class id
-	jint class_id = _get_class_id_for_object(jni_env, jvmti_env, buff, obj);
+  jlong tag = jvm_get_tag(obj);
 
-	// assign new net reference
-	jlong net_ref =
-			_set_net_reference(jvmti_env, obj, next_object_id(), class_id, 0, 0);
+  if (tag == 0) {
+    jlong temp_tag = 0;
 
-	return net_ref;
+    if (jvm_is_class(obj)) {
+      temp_tag = fold_tag(next_object_id(), next_class_id(), 1, 1);
+      // class object should be handled separately
+      // need to send class information
+      tag = jvm_set_tag_class(jni_env, obj, temp_tag);
+    } else {
+      // get class of this object
+      jlong klass_tag = jvm_get_object_class_tag(jni_env, obj);
+      jint klass_id = get_bits(klass_tag, CLASS_ID_MASK, CLASS_ID_POS);
+
+      temp_tag = fold_tag(next_object_id(), klass_id, 0, 0);
+      tag = jvm_set_tag_object(obj, temp_tag);
+    }
+  }
+
+  return tag;
 }
 
-// retrieves net_reference - performs tagging if necessary
-// can be used for any object - even classes
-// !!! invocation of this method should be protected by lock until the reference
+int ot_is_spec_set(jlong tag) {
+  return get_bits(tag, SPEC_MASK, SPEC_POS) == 1;
+}
+
 // is queued for sending
-jlong get_net_reference(JNIEnv * jni_env, jvmtiEnv * jvmti_env,
-		buffer * new_obj_buff, jobject obj) {
-
-	if(obj == NULL) { // net reference for NULL is 0
-		return 0;
-	}
-
-	// access object tag
-	jlong net_ref = get_tag(jvmti_env, obj);
-
-	// set net reference
-	if(net_ref == 0) {
-
-		// decide setting method
-		if(_object_is_class(jvmti_env, obj)) {
-			// we have class object
-			net_ref = _set_net_reference_for_class(jni_env, jvmti_env,
-					new_obj_buff, obj);
-		}
-		else {
-			// we have non-class object
-			net_ref = _set_net_reference_for_object(jni_env, jvmti_env,
-					new_obj_buff, obj);
-		}
-	}
-
-	return net_ref;
-}
-
-// !!! invocation of this method should be protected by lock until the reference
-// is queued for sending
-void update_net_reference(jvmtiEnv * jvmti_env, jobject obj, jlong net_ref) {
-
-	jvmtiError error = (*jvmti_env)->SetTag(jvmti_env, obj, net_ref);
-	check_jvmti_error(jvmti_env, error, "Cannot set object tag");
+void ot_set_spec(jobject obj, jlong tag) {
+  set_bits((uint64_t *) &tag, 1L, SPEC_MASK, SPEC_POS);
+  jvm_set_tag(obj, tag);
 }
