@@ -74,7 +74,7 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
     check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
   }
 
-  ot_get_tag(jni_env, klass);
+//  ot_get_tag(jni_env, klass);
 }
 
 void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {

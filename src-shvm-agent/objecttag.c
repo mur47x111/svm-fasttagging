@@ -176,7 +176,7 @@ static int jvm_is_class(jobject obj) {
 
 static jlong jvm_get_object_class_tag(JNIEnv * jni_env, jobject obj) {
   jclass klass = (jclass) & dereference(obj)->klass->java_mirror;
-  return jvm_get_tag(klass);
+  return ot_get_tag(jni_env, klass);
 }
 
 static jlong jvm_set_tag_object(jobject obj, jlong temp_tag) {
@@ -224,7 +224,9 @@ static jlong jvm_set_tag_class(JNIEnv * jni_env, jclass klass, jlong temp) {
 
   jlong tag = 0;
 
-  enter_critical_section(jvmti_env, tagging_lock);
+  // Assumption: no lock on the klass object
+  res = (*jni_env)->MonitorEnter(jni_env, klass);
+  check_error(res != 0, "monitor enter failed");
   {
     // compare and swap
     tag = jvm_get_tag(klass);
@@ -238,7 +240,8 @@ static jlong jvm_set_tag_class(JNIEnv * jni_env, jclass klass, jlong temp) {
       tag = temp;
     }
   }
-  exit_critical_section(jvmti_env, tagging_lock);
+  res = (*jni_env)->MonitorExit(jni_env, klass);
+  check_error(res != 0, "monitor exit failed");
 
   // deallocate memory
   error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *) class_sig);
