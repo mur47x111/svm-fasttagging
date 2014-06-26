@@ -62,6 +62,16 @@ static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
   //       It depends, where we want to have the load.
 
   // String - pack data
+  if (STRING_CLASS == NULL) {
+    STRING_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/String");
+    check_error(STRING_CLASS == NULL, "String class not found");
+  }
+
+  if (THREAD_CLASS == NULL) {
+    THREAD_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/Thread");
+    check_error(STRING_CLASS == NULL, "Thread class not found");
+  }
+
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, STRING_CLASS)) {
     ot_set_spec(to_send, *net_ref);
     ot_pack_string_data(jni_env, new_objs_buff, to_send, *net_ref);
@@ -223,14 +233,4 @@ void redispatcher_register_natives(JNIEnv * jni_env, jvmtiEnv * jvmti,
       sizeof(redispatchMethods) / sizeof(redispatchMethods[0]));
 
   jvmti_env = jvmti;
-
-  if (STRING_CLASS == NULL) {
-    STRING_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/String");
-    check_error(STRING_CLASS == NULL, "String class not found");
-  }
-
-  if (THREAD_CLASS == NULL) {
-    THREAD_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/Thread");
-    check_error(STRING_CLASS == NULL, "Thread class not found");
-  }
 }
