@@ -26,8 +26,6 @@ void pb_init() {
     // allocate process_buffs
     pb->analysis_buff = malloc(sizeof(buffer));
     buffer_alloc(pb->analysis_buff);
-    pb->command_buff = malloc(sizeof(buffer));
-    buffer_alloc(pb->command_buff);
 
     if (i < BQ_BUFFERS) {
       // add buffer to the empty queue
@@ -58,7 +56,6 @@ void pb_free() {
     //  - probably analysis data
     if (pb_list[i].owner_id >= STARTING_THREAD_ID) {
       relevant_count += buffer_filled(pb_list[i].analysis_buff);
-      support_count += buffer_filled(pb_list[i].command_buff);
       ++marked_thread_count;
 #ifdef DEBUG
       printf("Lost buffer for id %ld\n", pb_list[i].owner_id);
@@ -68,8 +65,7 @@ void pb_free() {
     // buffer held by thread that did NOT perform analysis
     //  - support data
     if (pb_list[i].owner_id == INVALID_THREAD_ID) {
-      support_count += buffer_filled(pb_list[i].analysis_buff)
-          + buffer_filled(pb_list[i].command_buff);
+      support_count += buffer_filled(pb_list[i].analysis_buff);
       ++non_marked_thread_count;
     }
 
@@ -121,7 +117,6 @@ process_buffs * pb_normal_get(jlong thread_id) {
 void pb_normal_release(process_buffs * buffs) {
   // empty buff
   buffer_clean(buffs->analysis_buff);
-  buffer_clean(buffs->command_buff);
 
   // stores pointer to buffer
   buffs->owner_id = PB_FREE;
@@ -141,7 +136,6 @@ process_buffs * pb_utility_get() {
 void pb_utility_release(process_buffs * buffs) {
   // empty buff
   buffer_clean(buffs->analysis_buff);
-  buffer_clean(buffs->command_buff);
 
   // stores pointer to buffer
   buffs->owner_id = PB_UTILITY;

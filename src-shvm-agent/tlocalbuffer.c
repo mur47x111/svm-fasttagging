@@ -30,7 +30,6 @@ void tl_insert_analysis_item(jshort analysis_method_id) {
     // get buffers
     tld->pb = pb_normal_get(tld->id);
     tld->analysis_buff = tld->pb->analysis_buff;
-    tld->command_buff = tld->pb->command_buff;
 
     // determines, how many analysis requests are sent in one message
     tld->analysis_count = 0;
@@ -76,7 +75,6 @@ void tl_insert_analysis_item_ordering(jshort analysis_method_id,
 
   // set local buffers for this buffering
   tld->analysis_buff = tld->local_pb->analysis_buff;
-  tld->command_buff = tld->local_pb->command_buff;
 
   tld->to_buff_id = ordering_id;
 

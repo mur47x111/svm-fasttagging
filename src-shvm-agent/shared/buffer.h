@@ -12,7 +12,6 @@ typedef struct {
 } buffer;
 
 typedef struct {
-  buffer * command_buff;
   buffer * analysis_buff;
   jlong owner_id;
 } process_buffs;

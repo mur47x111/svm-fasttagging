@@ -55,14 +55,8 @@ void glbuffer_commit() {
         tld->local_pb->analysis_buff->buff,
         tld->local_pb->analysis_buff->occupied);
 
-    buffer_fill(tobs->pb->command_buff,
-        // NOTE: normally access the buffer using methods
-        tld->local_pb->command_buff->buff,
-        tld->local_pb->command_buff->occupied);
-
     // empty local buffers (cheap)
     buffer_clean(tld->local_pb->analysis_buff);
-    buffer_clean(tld->local_pb->command_buff);
 
     // add number of completed requests
     ++(tobs->analysis_count);

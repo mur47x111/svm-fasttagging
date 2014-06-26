@@ -93,8 +93,8 @@ static int open_connection() {
 static void close_connection(int sockfd) {
   process_buffs * pb = pb_normal_get(tld_get()->id);
 
-  messager_close_header(pb->command_buff);
-  send_data(sockfd, pb->command_buff);
+  messager_close_header(pb->analysis_buff);
+  send_data(sockfd, pb->analysis_buff);
 
   pb_normal_release(pb);
   close(sockfd);
@@ -144,8 +144,6 @@ static void *sender_loop(void * obj) {
       buffer_clean(meta_buff_swap);
     }
 
-    // first send command buffer - contains new class or object ids,...
-    send_data(sockfd, pb->command_buff);
     // send analysis buffer
     send_data(sockfd, pb->analysis_buff);
 
