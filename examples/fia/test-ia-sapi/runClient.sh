@@ -29,7 +29,7 @@ shift
 
 # start client
 # numactl --cpubind=0 --membind=0 \
-     java -Xmx32g -noverify \
+     java -Xmx8g -noverify \
      -agentpath:${C_AGENT} \
      -agentpath:${RE_AGENT} \
      -Xbootclasspath/a:${INSTR_LIB}:${DISL_LIB_P}/dislre-dispatch.jar:${DISL_LIB_P}/disl-bypass.jar \

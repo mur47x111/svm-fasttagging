@@ -22,14 +22,14 @@ export RE_SERVER_FILE
 # kill running server
 if [ -e ${SERVER_FILE} ]
 then
-    kill -KILL `cat ${SERVER_FILE}`
+    kill -KILL `cat ${SERVER_FILE}` 2> /dev/null;
     rm ${SERVER_FILE}
 fi
 
 # kill running server
 if [ -e ${RE_SERVER_FILE} ]
 then
-    kill -KILL `cat ${RE_SERVER_FILE}`
+    kill -KILL `cat ${RE_SERVER_FILE}` 2> /dev/null;
     rm ${RE_SERVER_FILE}
 fi
 
@@ -57,7 +57,17 @@ while kill -0 "${RE_SERVER_PID}" 2> /dev/null; do
 	sleep 0.5
 done
 
-# remove server pid files
-rm ${SERVER_FILE}
-rm ${RE_SERVER_FILE}
+# kill running server
+if [ -e ${SERVER_FILE} ]
+then
+    kill -KILL `cat ${SERVER_FILE}` 2> /dev/null
+    rm ${SERVER_FILE}
+fi
+
+# kill running server
+if [ -e ${RE_SERVER_FILE} ]
+then
+    kill -KILL `cat ${RE_SERVER_FILE}` 2> /dev/null
+    rm ${RE_SERVER_FILE}
+fi
 

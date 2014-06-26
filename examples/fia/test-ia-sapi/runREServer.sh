@@ -16,7 +16,7 @@ shift
 # start server
 # numactl --cpubind=1 --membind=1 \
      java $* \
-     -Xmx32g \
+     -Xmx8g \
      -cp ${INSTR_LIB}:${DISL_LIB_P}/dislre-server.jar \
      ch.usi.dag.dislreserver.DiSLREServer \
      &
