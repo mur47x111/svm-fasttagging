@@ -118,6 +118,15 @@ static void *sender_loop(void * obj) {
 
   // exit when the jvm is terminated and there are no msg to process
   while (!(no_sending_work && bq_length(&send_q) == 0)) {
+    // get buffer
+    // TODO thread could timeout here with timeout about 5 sec and check
+    // if all of the buffers are allocated by the application threads
+    // and all application threads are waiting on free buffer - deadlock
+    process_buffs * pb;
+    bq_pop(&send_q, &pb);
+
+    // bug fixed: the sender thread might be blocked at the line above
+    //
     // meta buffer contains NewClass event and ClassInfo event,
     // will be sent first
     if (meta_buff->occupied > 0) {
@@ -134,13 +143,6 @@ static void *sender_loop(void * obj) {
       send_data(sockfd, meta_buff_swap);
       buffer_clean(meta_buff_swap);
     }
-
-    // get buffer
-    // TODO thread could timeout here with timeout about 5 sec and check
-    // if all of the buffers are allocated by the application threads
-    // and all application threads are waiting on free buffer - deadlock
-    process_buffs * pb;
-    bq_pop(&send_q, &pb);
 
     // first send command buffer - contains new class or object ids,...
     send_data(sockfd, pb->command_buff);
@@ -224,6 +226,23 @@ void sender_classinfo(jlong tag, const char* class_sig, const char* class_gen,
   {
     messager_classinfo_header(meta_buff, tag, class_sig, class_gen,
         class_loader_tag, super_class_tag);
+  }
+  pthread_mutex_unlock(&sender_lock);
+}
+
+void sender_stringinfo(jlong str_tag, const char * str, jsize str_len) {
+  pthread_mutex_lock(&sender_lock);
+  {
+    messager_stringinfo_header(meta_buff, str_tag, str, str_len);
+  }
+  pthread_mutex_unlock(&sender_lock);
+}
+
+void sender_threadinfo(jlong thread_tag, const char *str, jsize str_len,
+    jboolean is_daemon) {
+  pthread_mutex_lock(&sender_lock);
+  {
+    messager_threadinfo_header(meta_buff, thread_tag, str, str_len, is_daemon);
   }
   pthread_mutex_unlock(&sender_lock);
 }

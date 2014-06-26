@@ -15,4 +15,8 @@ void sender_newclass(const char* name, jlong loader_id, jint class_data_len,
 void sender_classinfo(jlong tag, const char* class_sig, const char* class_gen,
     jlong class_loader_tag, jlong super_class_tag);
 
+void sender_stringinfo(jlong str_tag, const char * str, jsize str_len);
+void sender_threadinfo(jlong thread_tag, const char *str, jsize str_len,
+    jboolean is_daemon);
+
 #endif /* _SENDER_H_ */

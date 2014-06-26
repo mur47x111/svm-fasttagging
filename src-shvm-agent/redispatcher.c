@@ -20,8 +20,8 @@ static volatile jclass STRING_CLASS = NULL;
 
 // TODO add cache - ??
 
-static void ot_pack_string_data(JNIEnv * jni_env, buffer * buff,
-    jstring to_send, jlong str_net_ref) {
+static void ot_pack_string_data(JNIEnv * jni_env, jstring to_send,
+    jlong str_tag) {
 
   // get string length
   jsize str_len = (*jni_env)->GetStringUTFLength(jni_env, to_send);
@@ -35,54 +35,51 @@ static void ot_pack_string_data(JNIEnv * jni_env, buffer * buff,
   check_error(!size_fits, "Java string is too big for sending");
 
   // add message to the buffer
-  messager_stringinfo_header(buff, str_net_ref, str, str_len);
+  sender_stringinfo(str_tag, str, str_len);
 
   // release string
   (*jni_env)->ReleaseStringUTFChars(jni_env, to_send, str);
 }
 
-static void ot_pack_thread_data(JNIEnv * jni_env, buffer * buff,
-    jstring to_send, jlong thr_net_ref) {
+static void ot_pack_thread_data(JNIEnv * jni_env, jstring to_send,
+    jlong thr_tag) {
 
   jvmtiThreadInfo info;
   jvmtiError error = (*jvmti_env)->GetThreadInfo(jvmti_env, to_send, &info);
   check_error(error != JVMTI_ERROR_NONE, "Cannot get tread info");
 
   // pack thread info message
-  messager_threadinfo_header(buff, thr_net_ref, info.name, strlen(info.name),
-      info.is_daemon);
+  sender_threadinfo(thr_tag, info.name, strlen(info.name), info.is_daemon);
 }
 
 static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
-    jobject to_send, buffer * new_objs_buff) {
+    jobject to_send) {
   // NOTE: we don't use lock for updating send status, so it is possible
   // that multiple threads will send it, but this will hurt only performance
 
   // NOTE: Tests for class types could be done by buffering threads.
   //       It depends, where we want to have the load.
-
   // String - pack data
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, STRING_CLASS)) {
     ot_set_spec(to_send, *net_ref);
-    ot_pack_string_data(jni_env, new_objs_buff, to_send, *net_ref);
+    ot_pack_string_data(jni_env, to_send, *net_ref);
   }
 
   // Thread - pack data
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, THREAD_CLASS)) {
     ot_set_spec(to_send, *net_ref);
-    ot_pack_thread_data(jni_env, new_objs_buff, to_send, *net_ref);
+    ot_pack_thread_data(jni_env, to_send, *net_ref);
   }
 }
 
-
-static void pack_object(JNIEnv * jni_env, buffer * buff, buffer * cmd_buff,
-    jobject to_send, bool sent_data) {
+static void pack_object(JNIEnv * jni_env, buffer * buff, jobject to_send,
+    bool sent_data) {
   // pack null net reference
   jlong tag = ot_get_tag(jni_env, to_send);
   pack_long(buff, tag);
 
   if (sent_data && !ot_is_spec_set(tag)) {
-    ot_pack_aditional_data(jni_env, &tag, to_send, cmd_buff);
+    ot_pack_aditional_data(jni_env, &tag, to_send);
   }
 }
 
@@ -191,13 +188,13 @@ JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendDouble(
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObject(
     JNIEnv * jni_env, jclass this_class, jobject to_send) {
   tldata * tld = tld_get();
-  pack_object(jni_env, tld->analysis_buff, tld->command_buff, to_send, 0);
+  pack_object(jni_env, tld->analysis_buff, to_send, 0);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData(
     JNIEnv * jni_env, jclass this_class, jobject to_send) {
   tldata * tld = tld_get();
-  pack_object(jni_env, tld->analysis_buff, tld->command_buff, to_send, 1);
+  pack_object(jni_env, tld->analysis_buff, to_send, 1);
 }
 
 static JNINativeMethod redispatchMethods[] = {
@@ -225,12 +222,14 @@ void redispatcher_register_natives(JNIEnv * jni_env, jvmtiEnv * jvmti,
   jvmti_env = jvmti;
 
   if (STRING_CLASS == NULL) {
-    STRING_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/String");
+    STRING_CLASS = (*jni_env)->NewGlobalRef(jni_env,
+        (*jni_env)->FindClass(jni_env, "java/lang/String"));
     check_error(STRING_CLASS == NULL, "String class not found");
   }
 
   if (THREAD_CLASS == NULL) {
-    THREAD_CLASS = (*jni_env)->FindClass(jni_env, "java/lang/Thread");
-    check_error(STRING_CLASS == NULL, "Thread class not found");
+    THREAD_CLASS = (*jni_env)->NewGlobalRef(jni_env,
+        (*jni_env)->FindClass(jni_env, "java/lang/Thread"));
+    check_error(THREAD_CLASS == NULL, "Thread class not found");
   }
 }
