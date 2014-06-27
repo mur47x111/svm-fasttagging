@@ -61,14 +61,14 @@ static void ot_pack_aditional_data(JNIEnv * jni_env, jlong * net_ref,
   //       It depends, where we want to have the load.
   // String - pack data
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, STRING_CLASS)) {
-    ot_set_spec(to_send, *net_ref);
     ot_pack_string_data(jni_env, to_send, *net_ref);
+    ot_set_spec(to_send, *net_ref);
   }
 
   // Thread - pack data
   if ((*jni_env)->IsInstanceOf(jni_env, to_send, THREAD_CLASS)) {
-    ot_set_spec(to_send, *net_ref);
     ot_pack_thread_data(jni_env, to_send, *net_ref);
+    ot_set_spec(to_send, *net_ref);
   }
 }
 

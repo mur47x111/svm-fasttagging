@@ -52,33 +52,33 @@ void messager_objfree_item(buffer *buff, jlong tag) {
   pack_long(buff, tag);
 }
 
-void messager_newclass_header(buffer *buff, const char* name, jlong loader_tag,
-    jint class_data_len, const unsigned char* class_data) {
-  pack_byte(buff, MSG_NEW_CLASS);
-  // class name
-  pack_string_utf8(buff, name, strlen(name));
-  // class loader id
-  pack_long(buff, loader_tag);
-  // class code length
-  pack_int(buff, class_data_len);
-  // class code
-  pack_bytes(buff, class_data, class_data_len);
+void messager_newclass_header(buffer *buff, const char* name, jsize name_len,
+		jlong loader_tag, jint class_data_len, const unsigned char* class_data) {
+	pack_byte(buff, MSG_NEW_CLASS);
+	// class name
+	pack_string_utf8(buff, name, name_len);
+	// class loader id
+	pack_long(buff, loader_tag);
+	// class code length
+	pack_int(buff, class_data_len);
+	// class code
+	pack_bytes(buff, class_data, class_data_len);
 }
 
 void messager_classinfo_header(buffer *buff, jlong class_tag,
-    const char *class_sig, const char *class_gen, jlong loader_tag,
-    jlong super_class_tag) {
-  pack_byte(buff, MSG_CLASS_INFO);
-  // class id
-  pack_long(buff, class_tag);
-  // class signature
-  pack_string_utf8(buff, class_sig, strlen(class_sig));
-  // class generic string
-  pack_string_utf8(buff, class_gen, strlen(class_gen));
-  // class loader id
-  pack_long(buff, loader_tag);
-  // super class id
-  pack_long(buff, super_class_tag);
+		const char *class_sig, jsize class_sig_len, const char *class_gen,
+		jsize class_gen_len, jlong loader_tag, jlong super_class_tag) {
+	pack_byte(buff, MSG_CLASS_INFO);
+	// class id
+	pack_long(buff, class_tag);
+	// class signature
+	pack_string_utf8(buff, class_sig, class_sig_len);
+	// class generic string
+	pack_string_utf8(buff, class_gen, class_gen_len);
+	// class loader id
+	pack_long(buff, loader_tag);
+	// super class id
+	pack_long(buff, super_class_tag);
 }
 
 void messager_stringinfo_header(buffer *buff, jlong str_tag, const char * str,

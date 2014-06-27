@@ -224,24 +224,29 @@ static jlong jvm_set_tag_class(JNIEnv * jni_env, jclass klass, jlong temp) {
 
   jlong tag = 0;
 
-  // Assumption: no lock on the klass object
-  res = (*jni_env)->MonitorEnter(jni_env, klass);
-  check_error(res != 0, "monitor enter failed");
-  {
-    // compare and swap
-    tag = jvm_get_tag(klass);
+	// Assumption: no lock on the klass object
+	res = (*jni_env)->MonitorEnter(jni_env, klass);
+	check_error(res != 0, "monitor enter failed");
+	{
+		// compare and swap
+		tag = jvm_get_tag(klass);
 
-    if (tag == 0) {
-      // pack class info into buffer
-      sender_classinfo(temp, class_sig, class_gen == NULL ? "" : class_gen,
-          class_loader_tag, super_class_tag);
+		if (tag == 0) {
+			// pack class info into buffer
+			if (class_gen == NULL) {
+				sender_classinfo(temp, class_sig, strlen(class_sig), "", 0,
+						class_loader_tag, super_class_tag);
+			} else {
+				sender_classinfo(temp, class_sig, strlen(class_sig), class_gen,
+						strlen(class_gen), class_loader_tag, super_class_tag);
+			}
 
-      jvm_set_tag(klass, temp);
-      tag = temp;
-    }
-  }
-  res = (*jni_env)->MonitorExit(jni_env, klass);
-  check_error(res != 0, "monitor exit failed");
+			jvm_set_tag(klass, temp);
+			tag = temp;
+		}
+	}
+	res = (*jni_env)->MonitorExit(jni_env, klass);
+	check_error(res != 0, "monitor exit failed");
 
   // deallocate memory
   error = (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *) class_sig);

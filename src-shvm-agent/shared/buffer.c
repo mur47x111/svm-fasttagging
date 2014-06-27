@@ -9,7 +9,6 @@
 // ******************* Buffer routines *******************
 
 void buffer_alloc(buffer * b) {
-
 	b->buff = (unsigned char *) malloc(INIT_BUFF_SIZE);
 	b->capacity = INIT_BUFF_SIZE;
 	b->occupied = 0;

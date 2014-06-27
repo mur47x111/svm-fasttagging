@@ -50,7 +50,7 @@ void JNICALL jvmti_callback_class_file_load_hook(jvmtiEnv *jvmti_env,
     loader_id = ot_get_tag(jni_env, loader);
   }
 
-  sender_newclass(name, loader_id, class_data_len, class_data);
+	sender_newclass(name, strlen(name), loader_id, class_data_len, class_data);
 }
 
 // registers all native methods so they can be used during VM init phase

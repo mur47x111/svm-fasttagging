@@ -14,7 +14,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration buildProperties="" description="" id="0.2116758488" name="Default" parent="org.eclipse.cdt.build.core.prefbase.cfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="" id="0.2116758488" name="Default" parent="org.eclipse.cdt.build.core.prefbase.cfg">
 					<folderInfo id="0.2116758488." name="/" resourcePath="">
 						<toolChain id="org.eclipse.cdt.build.core.prefbase.toolchain.82312290" name="No ToolChain" resourceTypeBasedDiscovery="false" superClass="org.eclipse.cdt.build.core.prefbase.toolchain">
 							<targetPlatform id="org.eclipse.cdt.build.core.prefbase.toolchain.82312290.1886356973" name=""/>
@@ -32,9 +32,8 @@
 							</tool>
 							<tool id="org.eclipse.cdt.build.core.settings.holder.1373508407" name="GNU C" superClass="org.eclipse.cdt.build.core.settings.holder">
 								<option id="org.eclipse.cdt.build.core.settings.holder.incpaths.1395500688" name="Include Paths" superClass="org.eclipse.cdt.build.core.settings.holder.incpaths" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/src-disl-agent}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/DiSL/src-jdk-include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/DiSL/src-jdk-include/macosx}&quot;"/>
+									<listOptionValue builtIn="false" value="/Users/zhengy/Workspace/svm-fasttagging/src-jdk-include"/>
+									<listOptionValue builtIn="false" value="/Users/zhengy/Workspace/svm-fasttagging/src-jdk-include/macosx"/>
 								</option>
 								<option id="org.eclipse.cdt.build.core.settings.holder.symbols.854925808" name="Symbols" superClass="org.eclipse.cdt.build.core.settings.holder.symbols" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="_LP64"/>
