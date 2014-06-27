@@ -102,19 +102,26 @@ static void close_connection(int sockfd) {
 
 // ******************* Sender routines *******************
 
-static blocking_queue send_q;
+typedef enum {
+  NEW_CLASS, CLASS_INFO, STRING_INFO, THREAD_INFO, META_TYPE_SIZE
+} META_DATA;
 
 static volatile int no_sending_work = 0;
 
-static buffer * meta_buff;
+static blocking_queue send_q;
 
-pthread_mutex_t sender_lock;
+static buffer *meta_buff[META_TYPE_SIZE];
+static pthread_mutex_t sender_lock[META_TYPE_SIZE];
 
 static void *sender_loop(void * obj) {
   int sockfd = open_connection();
 
-  buffer * meta_buff_swap = malloc(sizeof(buffer));
-  buffer_alloc (meta_buff_swap);
+  buffer * meta_buff_swap[META_TYPE_SIZE];
+
+  for (int i = 0; i < META_TYPE_SIZE; i++) {
+    meta_buff_swap[i] = malloc(sizeof(buffer));
+    buffer_alloc(meta_buff_swap[i]);
+  }
 
   // exit when the jvm is terminated and there are no msg to process
   while (!(no_sending_work && bq_length(&send_q) == 0)) {
@@ -129,19 +136,27 @@ static void *sender_loop(void * obj) {
     //
     // meta buffer contains NewClass event and ClassInfo event,
     // will be sent first
-    if (meta_buff->occupied > 0) {
-      //swap meta buffer
-      pthread_mutex_lock(&sender_lock);
-      {
-        buffer *temp = meta_buff_swap;
-        meta_buff_swap = meta_buff;
-        meta_buff = temp;
-      }
-      pthread_mutex_unlock(&sender_lock);
 
-      // send meta buffer
-      send_data(sockfd, meta_buff_swap);
-      buffer_clean(meta_buff_swap);
+    // swap meta buffers in reversed ordering
+    for (int i = META_TYPE_SIZE - 1; i >= 0; i--) {
+      if (meta_buff[i]->occupied > 0) {
+        pthread_mutex_lock(&sender_lock[i]);
+        {
+          buffer *temp = meta_buff_swap[i];
+          meta_buff_swap[i] = meta_buff[i];
+          meta_buff[i] = temp;
+        }
+        pthread_mutex_unlock(&sender_lock[i]);
+      }
+    }
+
+    // send meta buffers in normal ordering
+    for (int i = 0; i < META_TYPE_SIZE; i++) {
+      if (meta_buff_swap[i]->occupied > 0) {
+        // send meta buffer
+        send_data(sockfd, meta_buff_swap[i]);
+        buffer_clean(meta_buff_swap[i]);
+      }
     }
 
     // send analysis buffer
@@ -161,26 +176,34 @@ static void *sender_loop(void * obj) {
   return NULL;
 }
 
+void sender_flush() {
+  // send empty buff to sending thread -> ensures exit if waiting
+  process_buffs *buffs = pb_normal_get(tld_get()->id);
+  sender_enqueue(buffs);
+}
+
 void sender_init(char *options) {
   parse_agent_options(options);
 
-  int pmi = pthread_mutex_init(&sender_lock, NULL);
-  check_std_error(pmi != 0, "Cannot create pthread mutex");
-
   bq_create(&send_q, BQ_BUFFERS + BQ_UTILITY, sizeof(process_buffs *));
 
-  meta_buff = malloc(sizeof(buffer));
-  buffer_alloc(meta_buff);
-}
+  for (int i = 0; i < META_TYPE_SIZE; i++) {
+    // create buffer for each type of message
+    meta_buff[i] = malloc(sizeof(buffer));
+    buffer_alloc(meta_buff[i]);
 
-void sender_connect(pthread_t *sender_thread, int size) {
-  for (int i = 0; i < size; i++) {
-    int res = pthread_create(&sender_thread[i], NULL, sender_loop, NULL);
-    check_error(res != 0, "Cannot create sending thread");
+    // create lock for each type of message
+    int pmi = pthread_mutex_init(&sender_lock[i], NULL);
+    check_std_error(pmi != 0, "Cannot create pthread mutex");
   }
 }
 
-void sender_disconnect(pthread_t *sender_thread, int size) {
+void sender_connect(pthread_t *sender_thread) {
+  int res = pthread_create(sender_thread, NULL, sender_loop, NULL);
+  check_error(res != 0, "Cannot create sending thread");
+}
+
+void sender_disconnect(pthread_t *sender_thread) {
   no_sending_work = 1;
 
   // TODO if multiple sending threads, multiple empty buffers have to be send
@@ -188,16 +211,11 @@ void sender_disconnect(pthread_t *sender_thread, int size) {
   // sending queue - has to be supported by the queue itself
 
   // send empty buff to sending thread -> ensures exit if waiting
-  for (int i = 0; i < size; i++) {
-    process_buffs *buffs = pb_normal_get(tld_get()->id);
-    sender_enqueue(buffs);
-  }
+  sender_flush();
 
   // wait for thread end
-  for (int i = 0; i < size; i++) {
-    int res = pthread_join(sender_thread[i], NULL);
-    check_error(res != 0, "Cannot join sending thread.");
-  }
+  int res = pthread_join(*sender_thread, NULL);
+  check_error(res != 0, "Cannot join sending thread.");
 }
 
 void sender_enqueue(process_buffs * pb) {
@@ -208,40 +226,42 @@ void sender_enqueue(process_buffs * pb) {
   bq_push(&send_q, &pb);
 }
 
-void sender_newclass(const char* name, jsize name_len, jlong loader_id, jint class_data_len,
-    const unsigned char* class_data) {
-  pthread_mutex_lock(&sender_lock);
-	{
-		messager_newclass_header(meta_buff, name, name_len, loader_id,
-				class_data_len, class_data);
+void sender_newclass(const char* name, jsize name_len, jlong loader_id,
+    jint class_data_len, const unsigned char* class_data) {
+  pthread_mutex_lock(&sender_lock[NEW_CLASS]);
+  {
+    messager_newclass_header(meta_buff[NEW_CLASS], name, name_len, loader_id,
+        class_data_len, class_data);
   }
-  pthread_mutex_unlock(&sender_lock);
+  pthread_mutex_unlock(&sender_lock[NEW_CLASS]);
 }
 
 void sender_classinfo(jlong tag, const char* class_sig, jsize class_sig_len,
-		const char* class_gen, jsize class_gen_len, jlong class_loader_tag,
-		jlong super_class_tag) {
-	pthread_mutex_lock(&sender_lock);
-	{
-		messager_classinfo_header(meta_buff, tag, class_sig, class_sig_len,
-				class_gen, class_gen_len, class_loader_tag, super_class_tag);
-	}
-	pthread_mutex_unlock(&sender_lock);
+    const char* class_gen, jsize class_gen_len, jlong class_loader_tag,
+    jlong super_class_tag) {
+  pthread_mutex_lock(&sender_lock[NEW_CLASS]);
+  {
+    messager_classinfo_header(meta_buff[NEW_CLASS], tag, class_sig,
+        class_sig_len, class_gen, class_gen_len, class_loader_tag,
+        super_class_tag);
+  }
+  pthread_mutex_unlock(&sender_lock[NEW_CLASS]);
 }
 
 void sender_stringinfo(jlong str_tag, const char * str, jsize str_len) {
-  pthread_mutex_lock(&sender_lock);
+  pthread_mutex_lock(&sender_lock[STRING_INFO]);
   {
-    messager_stringinfo_header(meta_buff, str_tag, str, str_len);
+    messager_stringinfo_header(meta_buff[STRING_INFO], str_tag, str, str_len);
   }
-  pthread_mutex_unlock(&sender_lock);
+  pthread_mutex_unlock(&sender_lock[STRING_INFO]);
 }
 
 void sender_threadinfo(jlong thread_tag, const char *str, jsize str_len,
     jboolean is_daemon) {
-  pthread_mutex_lock(&sender_lock);
+  pthread_mutex_lock(&sender_lock[THREAD_INFO]);
   {
-    messager_threadinfo_header(meta_buff, thread_tag, str, str_len, is_daemon);
+    messager_threadinfo_header(meta_buff[THREAD_INFO], thread_tag, str, str_len,
+        is_daemon);
   }
-  pthread_mutex_unlock(&sender_lock);
+  pthread_mutex_unlock(&sender_lock[THREAD_INFO]);
 }

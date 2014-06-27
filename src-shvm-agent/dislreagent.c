@@ -25,10 +25,7 @@
 
 #include "../src-disl-agent/jvmtiutil.h"
 
-// FIXME current design does not support multiple sending threads
-#define SENDING_THREAD_NUM 1
-
-static pthread_t sender_thread[SENDING_THREAD_NUM];
+static pthread_t sender_thread;
 
 static int jvm_started = 0;
 
@@ -112,7 +109,7 @@ void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) 
   //GetThreadState
 
   // shutdown
-  sender_disconnect(sender_thread, SENDING_THREAD_NUM);
+  sender_disconnect(&sender_thread);
 
   pb_free();
 
@@ -219,7 +216,7 @@ Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
 
   sender_init(options);
 
-  sender_connect(sender_thread, SENDING_THREAD_NUM);
+  sender_connect(&sender_thread);
 
   return 0;
 }
