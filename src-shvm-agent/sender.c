@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <pthread.h>
 
 #include <netdb.h>
@@ -63,6 +64,10 @@ static unsigned long size_data_sent = 0;
 static unsigned long number_sent = 0;
 #endif
 
+#ifdef LOCALDUMP
+static FILE* output;
+#endif
+
 static void send_data(int sockfd, buffer * b) {
 
 #ifdef DEBUGMETRICS
@@ -78,9 +83,16 @@ static void send_data(int sockfd, buffer * b) {
 #ifdef DEBUGMETRICS
     number_sent++;
 #endif
+    int res = 0;
 
-    int res = send(sockfd, ((unsigned char *) b->buff) + sent,
+#ifdef LOCALDUMP
+    res = fwrite(((unsigned char *) b->buff) + sent, sizeof(char),
+        (b->occupied - sent), output);
+#else
+    res = send(sockfd, ((unsigned char *) b->buff) + sent,
         (b->occupied - sent), 0);
+#endif
+
     check_std_error(res == -1, "Error while sending data to server");
     sent += res;
   }
@@ -194,6 +206,11 @@ static void *sender_loop(void * obj) {
   printf("TOTAL INVOCATION # OF SEND: %ld\n", number_sent);
 #endif
 
+
+#ifdef LOCALDUMP
+  fclose(output);
+#endif
+
   return NULL;
 }
 
@@ -222,6 +239,10 @@ void sender_init(char *options) {
 void sender_connect(pthread_t *sender_thread) {
   int res = pthread_create(sender_thread, NULL, sender_loop, NULL);
   check_error(res != 0, "Cannot create sending thread");
+
+#ifdef LOCALDUMP
+  output = fopen("svm-dump.dat","w");
+#endif
 }
 
 void sender_disconnect(pthread_t *sender_thread) {
