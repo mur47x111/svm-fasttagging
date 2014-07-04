@@ -148,6 +148,60 @@ JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData(
   tl_pack_object(jni_env, tld_get()->analysis_buff, to_send, 1);
 }
 
+JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_analyze(
+    JNIEnv * jni_env, jclass this_class, jshort analysis_method_id) {
+#ifdef DEBUGMETRICS
+  tl_increase_all_counter();
+#endif
+
+  tl_insert_analysis_item(analysis_method_id);
+  tl_analysis_end();
+}
+
+JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_analyzeO(
+    JNIEnv * jni_env, jclass this_class, jshort analysis_method_id,
+    jobject to_send) {
+#ifdef DEBUGMETRICS
+  tl_increase_all_counter();
+#endif
+
+  tl_insert_analysis_item(analysis_method_id);
+  tl_pack_object(jni_env, tld_get()->analysis_buff, to_send, 0);
+  tl_analysis_end();
+}
+
+JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_analyzeOD(
+    JNIEnv * jni_env, jclass this_class, jshort analysis_method_id,
+    jobject to_send1, jobject to_send2) {
+#ifdef DEBUGMETRICS
+  tl_increase_all_counter();
+#endif
+
+  tldata *tld = tld_get();
+
+  tl_insert_analysis_item(analysis_method_id);
+  tl_pack_object(jni_env, tld->analysis_buff, to_send1, 0);
+  tl_pack_object(jni_env, tld->analysis_buff, to_send2, 1);
+  tl_analysis_end();
+}
+
+JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_analyzeODD(
+    JNIEnv * jni_env, jclass this_class, jshort analysis_method_id,
+    jobject to_send1, jobject to_send2, jobject to_send3) {
+#ifdef DEBUGMETRICS
+  tl_increase_all_counter();
+#endif
+
+  tldata *tld = tld_get();
+
+  tl_insert_analysis_item(analysis_method_id);
+  tl_pack_object(jni_env, tld->analysis_buff, to_send1, 0);
+  tl_pack_object(jni_env, tld->analysis_buff, to_send2, 1);
+  tl_pack_object(jni_env, tld->analysis_buff, to_send3, 1);
+  tl_analysis_end();
+}
+
+
 static JNINativeMethod redispatchMethods[] = {
     {"registerMethod",     "(Ljava/lang/String;)S", (void *)&Java_ch_usi_dag_dislre_REDispatch_registerMethod},
     {"analysisStart",      "(S)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_analysisStart__S},
@@ -163,6 +217,12 @@ static JNINativeMethod redispatchMethods[] = {
     {"sendDouble",         "(D)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_sendDouble},
     {"sendObject",         "(Ljava/lang/Object;)V", (void *)&Java_ch_usi_dag_dislre_REDispatch_sendObject},
     {"sendObjectPlusData", "(Ljava/lang/Object;)V", (void *)&Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData},
+    {"analyze",            "(S)V",                  (void *)&Java_ch_usi_dag_dislre_REDispatch_analyze},
+    {"analyzeO",           "(SLjava/lang/Object;)V",(void *)&Java_ch_usi_dag_dislre_REDispatch_analyzeO},
+    {"analyzeOD",          "(SLjava/lang/Object;Ljava/lang/Object;)V",
+                                                    (void *)&Java_ch_usi_dag_dislre_REDispatch_analyzeOD},
+    {"analyzeODD",         "(SLjava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V",
+                                                    (void *)&Java_ch_usi_dag_dislre_REDispatch_analyzeODD},
 };
 
 void redispatcher_register_natives(JNIEnv * jni_env, jvmtiEnv * jvmti,

@@ -53,4 +53,12 @@ public class REDispatch {
     //  - send length + all values in for cycle - all in native code
     //  PROBLEM: somebody can change the values from the outside
     //   - for example different thread
+
+    public static native void analyze (short analysisMethodID);
+    public static native void analyzeO (short analysisMethodID, Object tosend);
+    public static native void analyzeOD (
+        short analysisMethodID, Object tosend1, Object tosend2);
+    public static native void analyzeODD (
+        short analysisMethodID, Object tosend1, Object tosend2, Object tosend3);
+
 }
