@@ -58,12 +58,27 @@ static void parse_agent_options(char *options) {
   strcpy(host_name, options);
 }
 
+#ifdef DEBUGMETRICS
+static unsigned long size_data_sent = 0;
+static unsigned long number_sent = 0;
+#endif
+
 static void send_data(int sockfd, buffer * b) {
+
+#ifdef DEBUGMETRICS
+  size_data_sent += b->occupied;
+#endif
+
   // send data
   // NOTE: normally access the buffer using methods
   size_t sent = 0;
 
   while (sent != b->occupied) {
+
+#ifdef DEBUGMETRICS
+    number_sent++;
+#endif
+
     int res = send(sockfd, ((unsigned char *) b->buff) + sent,
         (b->occupied - sent), 0);
     check_std_error(res == -1, "Error while sending data to server");
@@ -173,6 +188,12 @@ static void *sender_loop(void * obj) {
   }
 
   close_connection(sockfd);
+
+#ifdef DEBUGMETRICS
+  printf("TOTAL SIZE OF DATA SENT: %ld\n", size_data_sent);
+  printf("TOTAL INVOCATION # OF SEND: %ld\n", number_sent);
+#endif
+
   return NULL;
 }
 
@@ -236,6 +257,17 @@ void sender_newclass(const char* name, jsize name_len, jlong loader_id,
   pthread_mutex_unlock(&sender_lock[NEW_CLASS]);
 }
 
+// Message newclass and classinfo could not be separated into two buffers.
+// Consider the following loading sequence:
+//  1- NEWCLASS (null) loads MyClassLoader
+//  2- CLASSINFO (null) loads MyClassLoader
+//  3- NEWCLASS MyClassLoader@1 loads MyClassA
+//  4- CLASSINFO MyClassLoader@1 loads MyClassA
+// If we use separated buffers, the event #3 will be sent before #2.
+// This could cause an error because ShadowObject MyClassLoader@1 cannot
+// be constructed before the SVM receives event #2.
+// TODO A possible fix is to change SVM class bytes mapping
+// from {SObject, Name}->byte[] to {Long, Name}->byte[]
 void sender_classinfo(jlong tag, const char* class_sig, jsize class_sig_len,
     const char* class_gen, jsize class_gen_len, jlong class_loader_tag,
     jlong super_class_tag) {

@@ -71,7 +71,8 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
     check_jvmti_error(jvmti_env, error, "Cannot deallocate memory");
   }
 
-//  ot_get_tag(jni_env, klass);
+  // The following line enables the early tagging of classes
+  //  ot_get_tag(jni_env, klass);
 }
 
 void JNICALL jvmti_callback_vm_start_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) {
@@ -109,6 +110,7 @@ void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) 
   //GetThreadState
 
   // shutdown
+  redispatcher_print_counters();
   sender_disconnect(&sender_thread);
 
   pb_free();

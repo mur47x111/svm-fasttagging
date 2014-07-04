@@ -16,6 +16,22 @@ static jvmtiEnv * jvmti_env;
 static volatile jclass THREAD_CLASS = NULL;
 static volatile jclass STRING_CLASS = NULL;
 
+#ifdef DEBUGMETRICS
+// first available object id
+static volatile unsigned long jni_start_counter = 0;
+// first available class id
+static volatile unsigned long jni_all_counter = 0;
+
+static inline void increase_start_counter() {
+  __sync_fetch_and_add(&jni_start_counter, 1);
+}
+
+static inline void increase_all_counter() {
+  __sync_fetch_and_add(&jni_all_counter, 1);
+}
+
+#endif
+
 // ******************* Object tagging thread *******************
 
 // TODO add cache - ??
@@ -126,73 +142,145 @@ static jshort register_method(JNIEnv * jni_env, jstring analysis_method_desc,
 
 JNIEXPORT jshort JNICALL Java_ch_usi_dag_dislre_REDispatch_registerMethod(
     JNIEnv * jni_env, jclass this_class, jstring analysis_method_desc) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   return register_method(jni_env, analysis_method_desc, tld_get()->id);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_analysisStart__S(
     JNIEnv * jni_env, jclass this_class, jshort analysis_method_id) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+  increase_start_counter();
+#endif
+
   tl_insert_analysis_item(analysis_method_id);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_analysisStart__SB(
     JNIEnv * jni_env, jclass this_class, jshort analysis_method_id,
     jbyte ordering_id) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+  increase_start_counter();
+#endif
+
   tl_insert_analysis_item_ordering(analysis_method_id, ordering_id);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_analysisEnd(
     JNIEnv * jni_env, jclass this_class) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   tl_analysis_end();
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendBoolean(
     JNIEnv * jni_env, jclass this_class, jboolean to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_boolean(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendByte(
     JNIEnv * jni_env, jclass this_class, jbyte to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_byte(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendChar(
     JNIEnv * jni_env, jclass this_class, jchar to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_char(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendShort(
     JNIEnv * jni_env, jclass this_class, jshort to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_short(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendInt(
     JNIEnv * jni_env, jclass this_class, jint to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_int(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendLong(
     JNIEnv * jni_env, jclass this_class, jlong to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_long(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendFloat(
     JNIEnv * jni_env, jclass this_class, jfloat to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_float(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendDouble(
     JNIEnv * jni_env, jclass this_class, jdouble to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   pack_double(tld_get()->analysis_buff, to_send);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObject(
     JNIEnv * jni_env, jclass this_class, jobject to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   tldata * tld = tld_get();
   pack_object(jni_env, tld->analysis_buff, to_send, 0);
 }
 
 JNIEXPORT void JNICALL Java_ch_usi_dag_dislre_REDispatch_sendObjectPlusData(
     JNIEnv * jni_env, jclass this_class, jobject to_send) {
+
+#ifdef DEBUGMETRICS
+  increase_all_counter();
+#endif
+
   tldata * tld = tld_get();
   pack_object(jni_env, tld->analysis_buff, to_send, 1);
 }
@@ -232,4 +320,11 @@ void redispatcher_register_natives(JNIEnv * jni_env, jvmtiEnv * jvmti,
         (*jni_env)->FindClass(jni_env, "java/lang/Thread"));
     check_error(THREAD_CLASS == NULL, "Thread class not found");
   }
+}
+
+void redispatcher_print_counters() {
+#ifdef DEBUGMETRICS
+  printf("TOTAL JNI CALL: %ld\n", jni_all_counter);
+  printf("TOTAL ANALYSIS START CALL: %ld\n", jni_start_counter);
+#endif
 }

@@ -5,5 +5,6 @@
 
 void redispatcher_register_natives(JNIEnv * jni_env, jvmtiEnv * jvmti,
     jclass klass);
+void redispatcher_print_counters();
 
 #endif	/* _REDISPATCHER_H */

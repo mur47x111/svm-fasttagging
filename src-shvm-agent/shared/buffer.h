@@ -7,8 +7,8 @@
 
 typedef struct {
 	unsigned char * buff;
-	size_t occupied;
-	size_t capacity;
+	volatile size_t occupied;
+	volatile size_t capacity;
 } buffer;
 
 typedef struct {
