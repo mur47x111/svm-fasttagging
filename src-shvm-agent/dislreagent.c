@@ -47,7 +47,7 @@ void JNICALL jvmti_callback_class_file_load_hook(jvmtiEnv *jvmti_env,
     loader_id = ot_get_tag(jni_env, loader);
   }
 
-	sender_newclass(name, strlen(name), loader_id, class_data_len, class_data);
+  sender_newclass(name, strlen(name), loader_id, class_data_len, class_data);
 }
 
 // registers all native methods so they can be used during VM init phase
@@ -63,6 +63,7 @@ void JNICALL jvmti_callback_class_prepare_hook(jvmtiEnv *jvmti_env,
 
     if (strcmp(class_sig, "Lch/usi/dag/dislre/REDispatch;") == 0) {
       redispatcher_register_natives(jni_env, jvmti_env, klass);
+      tl_init(jni_env, jvmti_env);
       registedFlag = 1;
     }
 
@@ -110,7 +111,7 @@ void JNICALL jvmti_callback_vm_death_hook(jvmtiEnv *jvmti_env, JNIEnv* jni_env) 
   //GetThreadState
 
   // shutdown
-  redispatcher_print_counters();
+  tl_print_counters();
   sender_disconnect(&sender_thread);
 
   pb_free();

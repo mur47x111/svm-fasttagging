@@ -99,8 +99,9 @@ CFLAGS += -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/$(JDK_TARGET)
 #CFLAGS += -W -Wall -Wextra -Wno-unused-parameter
 CFLAGS += -std=gnu99 -W -Wall -Wextra -Wno-unused-parameter
 
+# CFLAGS += -DLOCALDUMP
 # CFLAGS += -DFASTTAGGING
-CFLAGS += -DDEBUGMETRICS -DLOCALDUMP
+CFLAGS += -DDEBUGMETRICS 
 
 # Fix-up quirks before first target
 -include Makefile.quirks

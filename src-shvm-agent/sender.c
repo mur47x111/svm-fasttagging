@@ -202,8 +202,8 @@ static void *sender_loop(void * obj) {
   close_connection(sockfd);
 
 #ifdef DEBUGMETRICS
-  printf("TOTAL SIZE OF DATA SENT: %ld\n", size_data_sent);
-  printf("TOTAL INVOCATION # OF SEND: %ld\n", number_sent);
+  printf("# of invocation to socket.h:send() : %ld\n", number_sent);
+  printf("size of data sent: %ld\n", size_data_sent);
 #endif
 
 
